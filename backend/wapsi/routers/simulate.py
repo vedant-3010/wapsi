@@ -68,9 +68,11 @@ def simulate_next_day(db: Client = Depends(get_db), settings: Settings = Depends
             db.table("devices").update(
                 {"status": "recovered", "last_announced_at": now, "updated_at": now}
             ).eq("id", device["id"]).execute()
+            # The payment the Soundbox announces first: this shop's typical ticket, to the nearest ₹10.
+            first_payment = max(10, round(per_txn / 10) * 10) if per_txn else 0
             log_action(db, merchant_id=device["merchant_id"], device_id=device["id"], actor="system",
                        type="payments_resumed", detail=messages.payments_resumed(names[device["merchant_id"]], txns),
-                       payload={"txn_count": txns, "baseline": round(baseline, 1)})
+                       payload={"txn_count": txns, "baseline": round(baseline, 1), "amount": first_payment})
             recovered += 1
 
     # 3. The holdout recovers on its own at HOLDOUT_RECOVERY_RATE, lowest device ids first (no feed row).

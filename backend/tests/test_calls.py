@@ -42,24 +42,52 @@ def test_live_call_sends_user_data_to_bolna(
 ) -> None:
     sent: dict[str, object] = {}
 
-    def fake_start(_: Settings, phone: str, user_data: dict[str, str]) -> str:
-        sent.update(phone=phone, user_data=user_data)
+    def fake_start(_: Settings, phone: str, user_data: dict[str, str], agent_id: str) -> str:
+        sent.update(phone=phone, user_data=user_data, agent_id=agent_id)
         return "exec-123"
 
     monkeypatch.setattr(bolna, "start_call", fake_start)
     settings.call_dry_run = False
+    settings.bolna_agent_id = "agent-default"
     body = client.post("/api/calls/start", json={"merchant_id": "M001"}).json()
     assert body["execution_id"] == "exec-123"
     day = format_day(fake_db.one("settlements", merchant_id="M001")["settled_on"])
     assert sent == {
         "phone": DEMO_PHONE,
+        "agent_id": "agent-default",
         "user_data": {
             "call_id": body["call_id"], "merchant_id": "M001", "device_id": "SB-M001",
-            "merchant_name": "Sharma General Store", "owner_name": "Ramesh Sharma", "language_name": "Hindi",
+            "merchant_name": "Sharma General Store", "owner_name": "Ramesh Sharma", "owner_first_name": "Ramesh",
+            "language_name": "Hindi",
+            "greeting": "नमस्ते Ramesh जी! मैं Wapsi, Paytm merchant support से बोल रहा हूँ। "
+                        "आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
             "reason": "Silent 4 days · QR −80%", "days_silent": "4",
             "last_settlement_amount": "₹18,450", "last_settlement_date": day,
+            "slot_options": "tomorrow 11 AM to 1 PM or tomorrow 3 PM to 5 PM",
+            "goodwill_cap": "₹100",
         },
     }
+
+
+def test_marathi_merchant_uses_the_marathi_agent_and_greeting(
+    client: TestClient, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: dict[str, object] = {}
+
+    def fake_start(_: Settings, phone: str, user_data: dict[str, str], agent_id: str) -> str:
+        sent.update(agent_id=agent_id, user_data=user_data)
+        return "exec-mr"
+
+    monkeypatch.setattr(bolna, "start_call", fake_start)
+    settings.call_dry_run = False
+    settings.bolna_agent_id = "agent-default"
+    settings.bolna_agent_ids = {"mr": "agent-marathi"}
+    client.post("/api/calls/start", json={"merchant_id": "M002"})
+    assert sent["agent_id"] == "agent-marathi"
+    user_data = sent["user_data"]
+    assert isinstance(user_data, dict)
+    assert user_data["language_name"] == "Marathi"
+    assert user_data["greeting"].startswith("नमस्कार Sunita जी!")
 
 
 def test_bolna_failure_is_502_and_closes_the_call(

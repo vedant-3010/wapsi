@@ -23,3 +23,13 @@ def test_health_reports_db_and_bolna_mode(client: TestClient, monkeypatch: pytes
 )
 def test_bolna_status(overrides: dict[str, object], expected: str) -> None:
     assert bolna_status(Settings(_env_file=None, **overrides)) == expected
+
+
+def test_public_config_has_guardrails_but_no_numbers(client: TestClient) -> None:
+    assert client.get("/api/config").json() == {
+        "dry_run": True,
+        "calling_hours": "00:00-24:00",
+        "within_calling_hours": True,
+        "allowed_numbers": 1,
+        "goodwill_cap": 100,
+    }

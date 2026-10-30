@@ -22,6 +22,7 @@ def test_flagship_next_day_verifies_the_save(client: TestClient, fake_db: FakeDb
         f"Payments resumed at Sharma General Store: {volume['txn_count']} today, back to normal → verified save"
     )
     assert resumed["actor"] == "system"
+    assert resumed["payload"]["amount"] == 180  # the shop's typical ticket, announced by the Soundbox
 
 
 def test_untouched_devices_stay_at_risk(client: TestClient, fake_db: FakeDb) -> None:

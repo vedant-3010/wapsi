@@ -24,7 +24,7 @@ Paytm's device, settlement, field-service and billing systems are not public. We
 | 4 | Agent books a technician and resends the settlement statement | F4 |
 | 5 | Each action slides into the live feed while the call is on | F5 |
 | 6 | Call ends; transcript and outcome appear | F6 |
-| 7 | Click **Simulate next day**: device → *Recovered (verified)*, virtual Soundbox plays "₹50 received", KPIs update | F7, F9 |
+| 7 | Click **Simulate next day**: device → *Recovered (verified)*, the virtual Soundbox chimes and says the first payment ("Paytm पर 180 रुपये प्राप्त हुए"), KPIs update | F7, F9 |
 
 ## 3. Features
 
@@ -40,7 +40,7 @@ Paytm's device, settlement, field-service and billing systems are not public. We
 | F6 | **Post-call webhook** saves status, transcript, summary, duration, cost, outcome | Call card shows transcript after hang-up |
 | F7 | **Simulate next day** + verified save rule (§6) | M001 → Recovered (verified); Verified saves +1; ₹ retained +100 |
 | F8 | **Demo reset**: `POST /api/demo/reset` reseeds everything relative to today | One click restores the starting state |
-| F9 | **Virtual Soundbox** card: status light, last announcement time, plays `received.wav` when its device recovers | Light turns green and audio plays on recovery |
+| F9 | **Virtual Soundbox** card: status light, last announcement time, 30-day QR chart; when its device recovers it chimes and speaks the first payment's amount in the merchant's language (browser speech; amount from the `payments_resumed` payload) | Light turns green, "₹180 received" shows and is spoken |
 | F10 | **Handoff queue**: open handoffs with reason, summary, next step and **Take over** (`POST /api/handoffs/{id}/take`; logs a `human_takeover` action, actor = human) | M005 hardship call lands here; Take over marks it `taken` |
 | F16 | **Autonomous run**: primary **Start Wapsi's run** button → `POST /api/runs/start` picks the highest-risk merchant in cohort `wapsi` with status `at_risk` (`risk_queue` order) and calls `DEMO_DEFAULT_PHONE` through the same code path as `/api/calls/start`; writes a system action "Wapsi picked Sharma General Store: Silent 4 days · QR −80%". The per-row Call button stays as a backup | After a reset, one click picks M001 and the allowlisted phone rings |
 
@@ -52,7 +52,7 @@ Paytm's device, settlement, field-service and billing systems are not public. We
 | F12 | **`restart_device` tool**: clears `no_network`/`frozen`; device turns Online during the call | M002 fixed live |
 | F13 | **`apply_goodwill_credit` tool**, cap ₹100; above cap → refused, agent escalates | M004 credit applied; ₹500 request refused |
 | F14 | **Marathi**: per-merchant language; M002 and M004 calls in Marathi | One Marathi call works end to end |
-| F15 | **Visible guardrails**: allowlist + calling hours shown in a small "Safety" strip; every action tagged agent/human/system | Visible on dashboard |
+| F15 | **Visible guardrails**: Safety strip from `GET /api/config` (allowlist size, calling hours and whether they're open now, credit cap, dry run or real calls); every action tagged agent/human/system | Visible on dashboard |
 
 ### P2 — stretch (only if P0 + P1 done by 16:45 on build day)
 
@@ -285,7 +285,7 @@ holdout at_risk ──simulate next day──▶ recovered for HOLDOUT_RECOVERY_
 **Simulate next day** (`POST /api/simulate/next-day`), in order:
 
 1. `fix_scheduled` → fault `none`, status `awaiting_verification`; action `technician_visited` (actor system).
-2. For each `awaiting_verification` device: upsert today's `daily_volume` at 90–110% of baseline; set `last_announced_at = now()`; status `recovered`; action `payments_resumed` ("Payments resumed: 41 today, back to normal") (actor system).
+2. For each `awaiting_verification` device: upsert today's `daily_volume` at 90–110% of baseline; set `last_announced_at = now()`; status `recovered`; action `payments_resumed` ("Payments resumed at Sharma General Store: 41 today, back to normal → verified save") (actor system), payload `{txn_count, baseline, amount}` where `amount` is the shop's typical ticket to the nearest ₹10: the payment the Soundbox announces.
 3. Holdout recoveries per rule above (status `recovered`, no action row needed).
 4. Return counts: `{"recovered": n, "holdout_recovered": k}`.
 
@@ -297,6 +297,8 @@ Base URL: the backend Vercel project. All bodies JSON.
 
 **`GET /api/health`** → `{"ok": true, "db": "ok"|"error"|"not_configured", "bolna": "configured"|"dry_run"|"not_configured"}`. `bolna` is `dry_run` when `CALL_DRY_RUN`, else `configured` if `BOLNA_API_KEY` and `BOLNA_AGENT_ID` are set, else `not_configured`.
 
+**`GET /api/config`** (F15) → `{"dry_run": true, "calling_hours": "09:00-21:00", "within_calling_hours": true, "allowed_numbers": 2, "goodwill_cap": 100}`. Non-secret guardrails for the Safety strip; never the numbers themselves.
+
 **`POST /api/calls/start`**
 ```json
 { "merchant_id": "M001", "phone": "+91XXXXXXXXXX", "bypass_hours": false }
@@ -306,16 +308,20 @@ Base URL: the backend Vercel project. All bodies JSON.
 - Builds `user_data` (below). If `CALL_DRY_RUN`, skip Bolna and store `dry-<uuid>`; else `POST https://api.bolna.ai/call` with `Authorization: Bearer $BOLNA_API_KEY`:
 ```json
 {
-  "agent_id": "<BOLNA_AGENT_ID>",
+  "agent_id": "<BOLNA_AGENT_ID, or the merchant's language entry in BOLNA_AGENT_IDS>",
   "recipient_phone_number": "+91XXXXXXXXXX",
   "user_data": {
     "call_id": "6f1c…", "merchant_id": "M001", "device_id": "SB-M001",
-    "merchant_name": "Sharma General Store", "owner_name": "Ramesh Sharma",
-    "language_name": "Hindi", "reason": "Silent 4 days · QR −80%",
-    "days_silent": "4", "last_settlement_amount": "₹18,450", "last_settlement_date": "26 Oct"
+    "merchant_name": "Sharma General Store", "owner_name": "Ramesh Sharma", "owner_first_name": "Ramesh",
+    "language_name": "Hindi",
+    "greeting": "नमस्ते Ramesh जी! मैं Wapsi, Paytm merchant support से बोल रहा हूँ। आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
+    "reason": "Silent 4 days · QR −80%", "days_silent": "4",
+    "last_settlement_amount": "₹18,450", "last_settlement_date": "26 Oct",
+    "slot_options": "tomorrow 11 AM to 1 PM or tomorrow 3 PM to 5 PM", "goodwill_cap": "₹100"
   }
 }
 ```
+- `greeting` is per language (`messages.py`: hi, mr, en); `slot_options` comes from `TECHNICIAN_SLOTS`; `goodwill_cap` from `GOODWILL_CAP`. Nothing in the agent's words is hard-coded in Bolna.
 - Bolna returns `{"message": "done", "status": "queued", "execution_id": "…"}` → save `bolna_execution_id`.
 - Response: `{"call_id": "…", "execution_id": "…", "status": "queued"}`
 - Other errors: 400 no phone and no `DEMO_DEFAULT_PHONE`; 404 unknown merchant; 502 Bolna refused (the calls row gets status `error` and a `call_ended` action says so).
@@ -342,23 +348,23 @@ Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body
 | Endpoint | Body | Effect | `result` example | Action `detail` example |
 | --- | --- | --- | --- | --- |
 | `POST /api/tools/diagnostics` | `{merchant_id}` | Read device; action `diagnostics` | §6 messages | §6 details |
-| `POST /api/tools/book-technician` | `{merchant_id, slot}` | status `fix_scheduled`; booking id `TB-####`; action `technician_booked`; call outcome `fix_scheduled` | "Technician booked for tomorrow 11 AM to 1 PM. Booking TB-4821." | "Technician: booked tomorrow 11 AM to 1 PM (TB-4821) → fix scheduled (a speaker fault needs a visit)" |
+| `POST /api/tools/book-technician` | `{merchant_id, slot}` (no slot → the first `TECHNICIAN_SLOTS` entry) | status `fix_scheduled`; booking id `TB-####`; action `technician_booked`; call outcome `fix_scheduled` | "Technician booked for tomorrow 11 AM to 1 PM. Booking TB-4821." | "Technician: booked tomorrow 11 AM to 1 PM (TB-4821) → fix scheduled (a speaker fault needs a visit)" |
 | `POST /api/tools/resend-settlement` | `{merchant_id}` | Latest settlement; close `settlement_query` ticket; if fault `none` → `awaiting_verification`; action `statement_sent`; outcome `statement_sent` if none set yet | "₹18,450 was settled on 26 Oct. The statement has been sent on WhatsApp." | "Settlement: ₹18,450 paid on 26 Oct → statement sent on WhatsApp (proof the money arrived)"; adds ", query closed" when a ticket was closed |
-| `POST /api/tools/escalate` | `{merchant_id, reason, summary}` | `handoffs` row (next_step from reason); status `handed_off`; action `escalated`; outcome `handed_off` | "A senior colleague will call back within 2 hours." | "Escalated: hardship → Call back within 2 hours; offer rent pause (a rent pause needs a human decision)" |
+| `POST /api/tools/escalate` | `{merchant_id, reason, summary}` | `handoffs` row (next_step from reason); status `handed_off`; action `escalated`; outcome `handed_off` | per reason (table below) | "Escalated: hardship → Call back within 2 hours; offer rent pause (a rent pause needs a human decision)" |
 | `POST /api/tools/restart-device` (P1) | `{merchant_id}` | Rule §6; action `device_restarted`; outcome `fixed_live` | "Restart done. The device is back online." | "Restart: device back online → awaiting verification (a save counts only when payments resume)" |
 | `POST /api/tools/goodwill-credit` (P1) | `{merchant_id, amount}` | ≤ `GOODWILL_CAP` → rent `paid`, close `rent_dispute`, `awaiting_verification`, action `credit_applied`, outcome `credit_applied`; else action `credit_refused` | "₹100 credit applied to this month's rent." / "That is above my limit. I'll ask a senior to help." | "Goodwill credit: ₹100 applied → rent marked paid (it was charged while the device was down)" / "Goodwill credit: ₹500 refused → escalating (above the ₹100 cap)" |
 
 `next_step` and the feed's *why* by `reason`:
 
-| `reason` | `next_step` | Why (in `detail`) |
-| --- | --- | --- |
-| `hardship` | "Call back within 2 hours; offer rent pause" | "a rent pause needs a human decision" |
-| `angry` | "Senior callback today" | "still upset after one attempt to calm them" |
-| `asked_for_person` | "Senior callback today" | "the merchant asked for a person" |
-| `above_cap` | "Approve or reject credit" | "the credit asked is above the ₹100 cap" |
-| `fraud_kyc` | "Route to risk team" | "fraud and KYC go to the risk team only" |
-| `fixes_failed` | "Send technician with replacement device" | "two fixes did not work" |
-| anything else | "Senior callback today" | "the agent could not resolve it" (still hands off; never fails) |
+| `reason` | `next_step` | Why (in `detail`) | `result` (what the agent promises) |
+| --- | --- | --- | --- |
+| `hardship` | "Call back within 2 hours; offer rent pause" | "a rent pause needs a human decision" | "A senior colleague will call you back within 2 hours." |
+| `angry` | "Senior callback today" | "still upset after one attempt to calm them" | "A senior colleague will call you back today." |
+| `asked_for_person` | "Senior callback today" | "the merchant asked for a person" | same as `angry` |
+| `above_cap` | "Approve or reject credit" | "the credit asked is above the {`GOODWILL_CAP`} cap" | "A senior colleague will review the credit and call you back today." |
+| `fraud_kyc` | "Route to risk team" | "fraud and KYC go to the risk team only" | "Our risk team will call you back." |
+| `fixes_failed` | "Send technician with replacement device" | "two fixes did not work" | "A senior colleague will call you back today to send a replacement device." |
+| anything else | "Senior callback today" | "the agent could not resolve it" (still hands off; never fails) | same as `angry` |
 
 ### Webhook
 
@@ -371,8 +377,10 @@ Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body
 
 Configure in the Bolna dashboard (steps in `SETUP.md`). Variables in `{braces}` come from `user_data`.
 
-**Welcome message**
-> Namaste {owner_name} ji! Main Wapsi, Paytm merchant support se bol raha hoon. Aapke Soundbox mein kuch dikkat dikh rahi hai — kya hua?
+**Welcome message** (one variable; the backend writes it in the merchant's language, with their first name)
+> {greeting}
+
+**Languages**: one agent can serve every merchant (`Speak {language_name}`). If Marathi needs its own transcriber/voice settings, create a second agent and set `BOLNA_AGENT_IDS=mr=<agent id>`; other languages keep `BOLNA_AGENT_ID`.
 
 **Prompt**
 ```
@@ -380,7 +388,7 @@ You are Wapsi, a merchant-support agent calling on behalf of Paytm about the mer
 Speak {language_name}. Short, simple sentences. One question at a time. Never read IDs aloud.
 
 Already known (never ask for it):
-- Shop: {merchant_name}, owner {owner_name}
+- Shop: {merchant_name}, owner {owner_name} (call them {owner_first_name} ji)
 - merchant_id: {merchant_id}
 - Signal: {reason}
 - Last settlement: {last_settlement_amount} on {last_settlement_date}
@@ -389,13 +397,13 @@ Flow:
 1. You have greeted them. Listen to what happened.
 2. ALWAYS call run_diagnostics first, with merchant_id {merchant_id}.
 3. Fix based on the result:
-   - Speaker or power fault: offer two slots ("kal 11 se 1" or "kal 3 se 5"), then call book_technician.
+   - Speaker or power fault: offer these slots: {slot_options}. Then call book_technician with the one they pick.
    - No signal or frozen: call restart_device, then run_diagnostics again.
    - They doubt their settlement: call resend_settlement and tell them the date and amount.
-   - Upset about rent while the device was down: call apply_goodwill_credit (₹100 or less).
+   - Upset about rent while the device was down: call apply_goodwill_credit ({goodwill_cap} or less).
 4. Call escalate_to_human when: they ask for a person; still angry after one attempt to calm them;
-   hardship (shop closing, illness, money stress); they want more than ₹100 credit;
-   fraud or KYC topics; two fixes failed. Tell them a senior will call back.
+   hardship (shop closing, illness, money stress); they want more than {goodwill_cap} credit;
+   fraud or KYC topics; two fixes failed. Say exactly what the tool's result promises.
 5. Close: say what you did and what happens next, thank them. Keep the call under 2 minutes.
 Never promise anything a tool did not confirm.
 ```
@@ -406,7 +414,7 @@ Never promise anything a tool did not confirm.
 {
   "name": "run_diagnostics",
   "description": "Run remote diagnostics on the merchant's Soundbox. Always call this first, before suggesting any fix.",
-  "pre_call_message": "Ek second, main aapka device check karta hoon.",
+  "pre_call_message": "एक सेकंड, मैं आपका device check करता हूँ।",
   "parameters": {
     "type": "object",
     "properties": {
@@ -425,37 +433,40 @@ Never promise anything a tool did not confirm.
 }
 ```
 
-The others follow the same shape:
+The others follow the same shape (pre-call messages are spoken by Sarvam, so they're in Devanagari; a Marathi agent gets Marathi ones, see `docs/SETUP_CHECKLIST.md`):
 
 | name | url path | extra properties (`param` mapping) | pre_call_message |
 | --- | --- | --- | --- |
-| `book_technician` | `/api/tools/book-technician` | `slot` string, e.g. "tomorrow 11 AM to 1 PM" (`%(slot)s`) | "Main technician ka slot dekh raha hoon." |
-| `resend_settlement` | `/api/tools/resend-settlement` | — | "Main aapka statement nikaal raha hoon." |
-| `escalate_to_human` | `/api/tools/escalate` | `reason` enum [`asked_for_person`,`angry`,`hardship`,`above_cap`,`fraud_kyc`,`fixes_failed`] (`%(reason)s`), `summary` string (`%(summary)s`) | "Main aapko apne senior se jod raha hoon." |
-| `restart_device` (P1) | `/api/tools/restart-device` | — | "Main remote se aapka device restart kar raha hoon." |
-| `apply_goodwill_credit` (P1) | `/api/tools/goodwill-credit` | `amount` integer (`%(amount)i`) | "Main dekhta hoon kya kar sakte hain." |
+| `book_technician` | `/api/tools/book-technician` | `slot` string: one of the offered slot options (`%(slot)s`) | "मैं technician का slot देख रहा हूँ।" |
+| `resend_settlement` | `/api/tools/resend-settlement` | — | "मैं आपका statement निकाल रहा हूँ।" |
+| `escalate_to_human` | `/api/tools/escalate` | `reason` enum [`asked_for_person`,`angry`,`hardship`,`above_cap`,`fraud_kyc`,`fixes_failed`] (`%(reason)s`), `summary` string (`%(summary)s`) | "मैं आपको अपने senior से जोड़ रहा हूँ।" |
+| `restart_device` (P1) | `/api/tools/restart-device` | — | "मैं remote से आपका device restart कर रहा हूँ।" |
+| `apply_goodwill_credit` (P1) | `/api/tools/goodwill-credit` | `amount` integer (`%(amount)i`) | "मैं देखता हूँ क्या कर सकते हैं।" |
 
 **Agent settings**: transcriber Sarvam (Saaras), voice Sarvam Bulbul Hindi (e.g., `shubh`), fast LLM with tool calling, call summary **on**, webhook URL `https://<backend>.vercel.app/api/bolna/webhook?token=<WEBHOOK_SECRET>` (Extractions tab).
 
 ## 9. Dashboard
 
-One screen, dark navy (`#0B1D45`) with Paytm-blue accent (`#00BAF2`), large type.
+One screen. Design system "Night shift" (tokens in `dashboard/src/index.css`): frosted glass on the deck's navy darkened to near-black, 1px hairlines, grayscale text; Paytm blue (`#00BAF2`) marks what's live or most important; ok / warn / danger mark state, always with an icon or word. Geist for UI, Geist Mono captions and numbers, Instrument Serif for display moments. Lively only on change (springs, one-shot keyframes); nothing loops unless a call is live; reduced motion turns it off.
 
 ```
-┌ TopBar: Wapsi · Merchant recovery  [Start Wapsi's run] [Reset demo] [Simulate next day] ┐
-├ KPI strip: At risk · Calls today · Verified saves · ₹ retained · Handoffs   ┤
-├ At-risk queue (F1)   │ Live call (F5, F6)                 │ Virtual Soundbox (F9) ┤
-│ rows + Call button   │ status pill · merchant · language  │ Handoff queue (F10)   │
-│                      │ action feed (animated)             │ Impact (F11)          │
-│                      │ transcript after hang-up           │                       │
-└──────────────────────┴────────────────────────────────────┴───────────────────────┘
+┌ TopBar: Wapsi · Live updates · Dry run/Real calls   [Reset demo] [Simulate next day] [▶ Start Wapsi's run] ┐
+│ Safety strip (F15): allowlist size · calling hours (open now) · credit cap · every action logged          │
+├ KPI strip: At risk · Calls today · Verified saves · ₹ retained · Handoffs (numbers count up, "+1" floats) ┤
+├ At-risk queue (F1)        │ Live call (F5, F6)                     │ Virtual Soundbox (F9)  ┤
+│ All/Wapsi/Holdout filter  │ sticky header: merchant, language,     │ device, LED, display,  │
+│ risk ring · signal chips  │ masked phone, timer, outcome           │ 30-day chart           │
+│ 30-day sparkline · Call   │ timeline: finding → decision · Why     │ Handoff queue (F10)    │
+│ "On call" on the live row │ summary · recording · transcript chat  │ Impact (F11)           │
+└───────────────────────────┴────────────────────────────────────────┴────────────────────────┘
 ```
 
 - **Start Wapsi's run** (F16): the primary button (filled Paytm blue) → `POST /api/runs/start` with `{}`; no dialog (the backend always uses `DEMO_DEFAULT_PHONE`). Disabled while the request is in flight or the latest call is still active; a 409/404 shows its `detail` as a short toast.
 - **Queue**: `select * from risk_queue order by risk_score desc, days_silent desc`. Call (the backup to Start Wapsi's run) opens a small dialog: phone (prefilled `VITE_DEMO_PHONE`) → `POST /api/calls/start`.
 - **Handoff queue** (F10): `handoffs` with status `open`, newest first, with merchant name, reason, summary, next step and **Take over** → `POST /api/handoffs/{id}/take`.
-- **Live call**: latest `calls` row; status pill (queued, ringing, in-progress, completed); feed = `actions` for that `call_id` plus `system` actions, newest at bottom; icon per action type.
-- **Virtual Soundbox**: shows the device of the latest call. Light: red `at_risk`, amber `fix_scheduled`/`awaiting_verification`, green `recovered`. On a `payments_resumed` action for its device: turn green and play `/sounds/received.wav`. (Browsers block audio until a click: the first click on the page unlocks it.)
+- **Live call**: latest `calls` row (with `raw->telephony_data->>recording_url`); status pill; feed = `actions` for that `call_id` plus actions with no `call_id` created after it started, newest at bottom, each parsed into finding → decision and Why. Transcript lines `assistant:` / `user:` render as a chat.
+- **Virtual Soundbox**: the device of the latest call. LED red `at_risk`, amber `fix_scheduled`/`awaiting_verification`, grey `handed_off`, green `recovered`. On a new `payments_resumed` action for its device: sound rings, "₹{amount} received" on its display, a two-note chime, then the amount spoken in the merchant's language. Browsers block audio until the first click on the page, which primes it. Actions are keyed by `id` + `created_at` because a reset restarts ids.
+- **Sparklines**: view `volume_series` (migration `0003_volume_series.sql`): one row per device with 30 days of `txns`, so the dashboard never hits Supabase's 1,000-row limit.
 - **Realtime**: one channel; `postgres_changes` on `actions` (INSERT) → append; on `calls`, `devices`, `handoffs` (`*`) → refetch queue + KPIs.
 
 ```ts

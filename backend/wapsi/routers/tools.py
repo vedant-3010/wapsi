@@ -86,9 +86,13 @@ def diagnostics(body: ToolRequest, db: Client = Depends(get_db)) -> ToolResponse
 
 
 @router.post("/book-technician")
-def book_technician(body: BookTechnicianRequest, db: Client = Depends(get_db)) -> ToolResponse:
+def book_technician(
+    body: BookTechnicianRequest,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ToolResponse:
     ctx = _context(db, body.merchant_id)
-    slot = (body.slot or "").strip() or messages.DEFAULT_SLOT
+    slot = (body.slot or "").strip() or messages.slot_labels(settings.technician_slots)[0]
     booking_id = f"TB-{random.randint(1000, 9999)}"
     if ctx.device["status"] != "recovered":
         _update_device(db, ctx, {"status": "fix_scheduled"})
@@ -121,7 +125,11 @@ def resend_settlement(body: ToolRequest, db: Client = Depends(get_db)) -> ToolRe
 
 
 @router.post("/escalate")
-def escalate(body: EscalateRequest, db: Client = Depends(get_db)) -> ToolResponse:
+def escalate(
+    body: EscalateRequest,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ToolResponse:
     ctx = _context(db, body.merchant_id)
     reason = (body.reason or "").strip().lower()
     escalation = messages.ESCALATIONS.get(reason, messages.FALLBACK_ESCALATION)
@@ -134,9 +142,9 @@ def escalate(body: EscalateRequest, db: Client = Depends(get_db)) -> ToolRespons
     }).execute()
     if ctx.device["status"] in ("at_risk", "fix_scheduled"):
         _update_device(db, ctx, {"status": "handed_off"})
-    _log(db, ctx, "escalated", messages.escalated_detail(escalation), {"reason": reason})
+    _log(db, ctx, "escalated", messages.escalated_detail(escalation, settings.goodwill_cap), {"reason": reason})
     set_outcome(db, ctx.call, "handed_off")
-    return ToolResponse(result=messages.ESCALATED_RESULT)
+    return ToolResponse(result=escalation.result)
 
 
 @router.post("/restart-device")

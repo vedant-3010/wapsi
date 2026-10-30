@@ -25,6 +25,7 @@ COLUMNS: dict[str, set[str]] = {
               "duration_s", "cost_cents", "transcript", "summary", "outcome", "raw"},
     "actions": {"id", "call_id", "merchant_id", "device_id", "type", "detail", "payload", "actor", "created_at"},
     "handoffs": {"id", "call_id", "merchant_id", "reason", "summary", "next_step", "status", "created_at"},
+    "volume_series": {"device_id", "days", "txns"},
     "risk_queue": {"device_id", "merchant_id", "name", "owner_name", "area", "language", "cohort", "scripted",
                    "status", "fault", "rent_status", "days_silent", "qr_drop_pct", "open_ticket", "risk_score",
                    "reason"},

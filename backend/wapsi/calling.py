@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 from supabase import Client
 
-from wapsi import bolna
+from wapsi import bolna, messages
 from wapsi.actions import log_action
 from wapsi.config import Settings
 from wapsi.context import get_device, get_merchant
@@ -26,28 +26,34 @@ def within_calling_hours(settings: Settings, now: datetime | None = None) -> boo
 
 
 def build_user_data(
+    settings: Settings,
     call_id: str,
     merchant: dict[str, Any],
     device: dict[str, Any] | None,
     risk: dict[str, Any] | None,
     settlement: dict[str, Any] | None,
 ) -> dict[str, str]:
-    """Variables for the Bolna prompt (SPEC §8). Bolna wants every value as a string."""
+    """Variables for the Bolna welcome message and prompt (SPEC §8). Bolna wants every value as a string."""
     if risk is not None:
         days_silent = int(risk["days_silent"])
     else:
         days_silent = days_since(device["last_announced_at"]) if device else 0
+    first_name = merchant["owner_name"].split()[0]
     return {
         "call_id": call_id,
         "merchant_id": merchant["id"],
         "device_id": device["id"] if device else "",
         "merchant_name": merchant["name"],
         "owner_name": merchant["owner_name"],
+        "owner_first_name": first_name,
         "language_name": LANGUAGE_NAMES.get(merchant["language"], "Hindi"),
+        "greeting": messages.greeting(merchant["language"], first_name),
         "reason": (risk or {}).get("reason") or "",
         "days_silent": str(days_silent),
         "last_settlement_amount": format_inr(settlement["amount"]) if settlement else "",
         "last_settlement_date": format_day(settlement["settled_on"]) if settlement else "",
+        "slot_options": " or ".join(messages.slot_labels(settings.technician_slots)),
+        "goodwill_cap": format_inr(settings.goodwill_cap),
     }
 
 
@@ -90,12 +96,12 @@ def start_call(
                    payload={"risk_score": picked["risk_score"], "reason": picked["reason"]}, **feed)
     log_action(db, type="call_started", detail=f"Calling {merchant['name']}", **feed)
 
-    user_data = build_user_data(call["id"], merchant, device, risk, settlement)
+    user_data = build_user_data(settings, call["id"], merchant, device, risk, settlement)
     if settings.call_dry_run:
         execution_id = f"dry-{uuid4()}"
     else:
         try:
-            execution_id = bolna.start_call(settings, phone, user_data)
+            execution_id = bolna.start_call(settings, phone, user_data, settings.agent_id_for(merchant["language"]))
         except bolna.BolnaError as exc:
             logger.error("Bolna could not start the call to %s: %s", merchant_id, exc)
             db.table("calls").update({"status": "error", "ended_at": utc_now().isoformat()}).eq("id", call["id"]).execute()

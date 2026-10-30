@@ -12,7 +12,25 @@ SAFE_RESULT = "I couldn't check that right now; a senior will call back."
 
 LANGUAGE_NAMES = {"hi": "Hindi", "mr": "Marathi", "en": "English"}
 
-DEFAULT_SLOT = "tomorrow 11 AM to 1 PM"
+# The agent's first line (Bolna welcome message = {greeting}). Native script reads best with Sarvam
+# Bulbul; brand words stay in English, as merchants say them.
+_GREETINGS = {
+    "hi": "नमस्ते {name} जी! मैं Wapsi, Paytm merchant support से बोल रहा हूँ। "
+          "आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
+    "mr": "नमस्कार {name} जी! मी Wapsi, Paytm merchant support मधून बोलतोय. "
+          "तुमच्या Soundbox मध्ये काहीतरी अडचण दिसतेय. काय झालं?",
+    "en": "Hello {name}! This is Wapsi from Paytm merchant support. Your Soundbox seems to have a problem. "
+          "What happened?",
+}
+
+
+def greeting(language: str, first_name: str) -> str:
+    return _GREETINGS.get(language, _GREETINGS["hi"]).format(name=first_name)
+
+
+def slot_labels(slots: list[str]) -> list[str]:
+    """TECHNICIAN_SLOTS as the agent offers them: "tomorrow 11 AM to 1 PM"."""
+    return [f"tomorrow {slot}" for slot in slots]
 
 
 def diagnostics(fault: str, rent_status: str, days_silent: int, rent: int) -> tuple[str, str]:
@@ -78,25 +96,33 @@ NO_SETTLEMENT = (
 class Escalation:
     label: str
     next_step: str
-    why: str
+    why: str  # may contain {cap}
+    result: str  # what the agent promises; matches next_step
 
 
+_CALLBACK_TODAY = "A senior colleague will call you back today."
 ESCALATIONS = {
-    "hardship": Escalation("hardship", "Call back within 2 hours; offer rent pause", "a rent pause needs a human decision"),
-    "angry": Escalation("angry", "Senior callback today", "still upset after one attempt to calm them"),
-    "asked_for_person": Escalation("asked for a person", "Senior callback today", "the merchant asked for a person"),
-    "above_cap": Escalation("credit above cap", "Approve or reject credit", "the credit asked is above the ₹100 cap"),
-    "fraud_kyc": Escalation("fraud/KYC", "Route to risk team", "fraud and KYC go to the risk team only"),
-    "fixes_failed": Escalation("fixes failed", "Send technician with replacement device", "two fixes did not work"),
+    "hardship": Escalation("hardship", "Call back within 2 hours; offer rent pause",
+                           "a rent pause needs a human decision",
+                           "A senior colleague will call you back within 2 hours."),
+    "angry": Escalation("angry", "Senior callback today", "still upset after one attempt to calm them", _CALLBACK_TODAY),
+    "asked_for_person": Escalation("asked for a person", "Senior callback today", "the merchant asked for a person",
+                                   _CALLBACK_TODAY),
+    "above_cap": Escalation("credit above cap", "Approve or reject credit", "the credit asked is above the {cap} cap",
+                            "A senior colleague will review the credit and call you back today."),
+    "fraud_kyc": Escalation("fraud/KYC", "Route to risk team", "fraud and KYC go to the risk team only",
+                            "Our risk team will call you back."),
+    "fixes_failed": Escalation("fixes failed", "Send technician with replacement device", "two fixes did not work",
+                               "A senior colleague will call you back today to send a replacement device."),
 }
 # Unknown or missing reason from the LLM: still hand off, never fail.
-FALLBACK_ESCALATION = Escalation("needs a human", "Senior callback today", "the agent could not resolve it")
+FALLBACK_ESCALATION = Escalation("needs a human", "Senior callback today", "the agent could not resolve it",
+                                 _CALLBACK_TODAY)
 
-ESCALATED_RESULT = "A senior colleague will call back within 2 hours."
 
-
-def escalated_detail(escalation: Escalation) -> str:
-    return f"Escalated: {escalation.label} → {escalation.next_step} ({escalation.why})"
+def escalated_detail(escalation: Escalation, cap: int) -> str:
+    why = escalation.why.format(cap=format_inr(cap))
+    return f"Escalated: {escalation.label} → {escalation.next_step} ({why})"
 
 
 def restarted(fault: str) -> tuple[str, str]:

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     supabase_secret_key: str = ""
     bolna_api_key: str = ""
     bolna_agent_id: str = ""
+    # Optional agent per language, e.g. "mr=<agent id>"; others use BOLNA_AGENT_ID.
+    bolna_agent_ids: Annotated[dict[str, str], NoDecode] = {}
     tool_secret: str = ""
     webhook_secret: str = ""
     allowed_numbers: Annotated[list[str], NoDecode] = []
@@ -23,14 +25,27 @@ class Settings(BaseSettings):
     call_dry_run: bool = True  # safe default: never place a real call unless told to
     goodwill_cap: int = 100
     holdout_recovery_rate: float = 0.1
+    # Technician windows the mocked field-service system offers for tomorrow (IST).
+    technician_slots: Annotated[list[str], NoDecode] = ["11 AM to 1 PM", "3 PM to 5 PM"]
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
-    @field_validator("allowed_numbers", "cors_origins", mode="before")
+    @field_validator("allowed_numbers", "cors_origins", "technician_slots", mode="before")
     @classmethod
     def _split_csv(cls, value: object) -> object:
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("bolna_agent_ids", mode="before")
+    @classmethod
+    def _parse_agent_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            pairs = (item.split("=", 1) for item in value.split(",") if "=" in item)
+            return {lang.strip(): agent.strip() for lang, agent in pairs if agent.strip()}
+        return value
+
+    def agent_id_for(self, language: str) -> str:
+        return self.bolna_agent_ids.get(language, self.bolna_agent_id)
 
     @property
     def calling_window(self) -> tuple[time, time]:

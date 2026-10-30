@@ -16,6 +16,16 @@ class HealthResponse(BaseModel):
     bolna: BolnaStatus
 
 
+class PublicConfig(BaseModel):
+    """Non-secret guardrails for the dashboard's Safety strip (F15). Never the numbers themselves."""
+
+    dry_run: bool
+    calling_hours: str
+    within_calling_hours: bool
+    allowed_numbers: int
+    goodwill_cap: int
+
+
 class StartCallRequest(BaseModel):
     merchant_id: str
     phone: str | None = None  # None → DEMO_DEFAULT_PHONE

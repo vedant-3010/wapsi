@@ -12,13 +12,16 @@ from typing import Any
 from supabase import Client
 
 from wapsi.db import first
-from wapsi.util import utc_now
+from wapsi.util import parse_ts, utc_now
 
 logger = logging.getLogger(__name__)
 
 # SPEC §7 plus Bolna's other final states, so a call can't stay "active" forever.
 TERMINAL_STATUSES = ("completed", "failed", "no-answer", "busy", "canceled", "error", "stopped", "balance-low")
 ACTIVE_WINDOW = timedelta(minutes=15)
+# Bolna reports "initiated"/"ringing" within seconds. A call still "queued" after this never connected
+# (a dry run, or webhooks not set up), so it must not block the next run for 15 minutes.
+QUEUED_GRACE = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
@@ -42,16 +45,22 @@ class CallContext:
 
 def active_call(db: Client) -> dict[str, Any] | None:
     """The latest call that hasn't reached a final status, started in the last 15 minutes."""
-    since = (utc_now() - ACTIVE_WINDOW).isoformat()
-    return first(
+    now = utc_now()
+    recent = (
         db.table("calls")
         .select("*")
         .not_.in_("status", list(TERMINAL_STATUSES))
-        .gte("started_at", since)
+        .gte("started_at", (now - ACTIVE_WINDOW).isoformat())
         .order("started_at", desc=True)
-        .limit(1)
+        .limit(5)
         .execute()
+        .data
     )
+    for call in recent:
+        if call["status"] == "queued" and parse_ts(call["started_at"]) < now - QUEUED_GRACE:
+            continue
+        return call
+    return None
 
 
 def get_merchant(db: Client, merchant_id: str) -> dict[str, Any] | None:

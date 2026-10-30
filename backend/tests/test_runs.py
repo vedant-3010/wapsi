@@ -1,6 +1,8 @@
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
 
-from tests.fakedb import FakeDb
+from tests.fakedb import FakeDb, now_iso
 
 
 def test_run_picks_top_wapsi_at_risk_merchant(client: TestClient, fake_db: FakeDb) -> None:
@@ -40,3 +42,15 @@ def test_backup_call_button_is_not_blocked_by_an_active_call(client: TestClient)
 def test_empty_queue_is_404(client: TestClient, fake_db: FakeDb) -> None:
     fake_db.tables["risk_queue"].clear()
     assert client.post("/api/runs/start", json={}).status_code == 404
+
+
+def test_a_call_that_never_left_queued_stops_blocking_after_two_minutes(client: TestClient, fake_db: FakeDb) -> None:
+    assert client.post("/api/runs/start", json={}).status_code == 200
+    fake_db.tables["calls"][0]["started_at"] = now_iso(-timedelta(minutes=3))  # no webhook ever arrived
+    assert client.post("/api/runs/start", json={}).status_code == 200
+
+
+def test_a_ringing_call_still_blocks_after_two_minutes(client: TestClient, fake_db: FakeDb) -> None:
+    assert client.post("/api/runs/start", json={}).status_code == 200
+    fake_db.tables["calls"][0].update(status="ringing", started_at=now_iso(-timedelta(minutes=3)))
+    assert client.post("/api/runs/start", json={}).status_code == 409

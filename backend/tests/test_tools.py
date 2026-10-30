@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from tests.conftest import TOOL_AUTH, start_dry_call
 from tests.fakedb import FakeDb
+from wapsi.config import Settings
 from wapsi.messages import SAFE_RESULT
 from wapsi.util import format_day
 
@@ -114,8 +115,9 @@ def test_book_technician(client: TestClient, fake_db: FakeDb) -> None:
     )
 
 
-def test_book_technician_defaults_the_slot(client: TestClient) -> None:
-    assert "tomorrow 11 AM to 1 PM" in str(tool(client, "book-technician", {"merchant_id": "M001"})["result"])
+def test_book_technician_defaults_to_the_first_configured_slot(client: TestClient, settings: Settings) -> None:
+    settings.technician_slots = ["9 AM to 11 AM", "2 PM to 4 PM"]
+    assert "tomorrow 9 AM to 11 AM" in str(tool(client, "book-technician", {"merchant_id": "M001"})["result"])
 
 
 def test_resend_settlement_flagship(client: TestClient, fake_db: FakeDb) -> None:
@@ -138,7 +140,7 @@ def test_resend_settlement_closes_query_and_awaits_verification(client: TestClie
 def test_escalate_hardship(client: TestClient, fake_db: FakeDb) -> None:
     call_id = start_dry_call(client, "M005")
     result = tool(client, "escalate", {"merchant_id": "M005", "reason": "hardship", "summary": "Shop may close"})
-    assert result["result"] == "A senior colleague will call back within 2 hours."
+    assert result["result"] == "A senior colleague will call you back within 2 hours."
     handoff = fake_db.one("handoffs", merchant_id="M005")
     assert handoff["next_step"] == "Call back within 2 hours; offer rent pause"
     assert handoff["call_id"] == call_id
@@ -150,8 +152,27 @@ def test_escalate_hardship(client: TestClient, fake_db: FakeDb) -> None:
 
 
 def test_escalate_unknown_reason_still_hands_off(client: TestClient, fake_db: FakeDb) -> None:
-    tool(client, "escalate", {"merchant_id": "M005", "reason": "something else"})
+    result = tool(client, "escalate", {"merchant_id": "M005", "reason": "something else"})
+    assert result["result"] == "A senior colleague will call you back today."
     assert fake_db.one("handoffs", merchant_id="M005")["next_step"] == "Senior callback today"
+
+
+@pytest.mark.parametrize(
+    ("reason", "promise"),
+    [
+        ("angry", "A senior colleague will call you back today."),
+        ("fraud_kyc", "Our risk team will call you back."),
+        ("fixes_failed", "A senior colleague will call you back today to send a replacement device."),
+    ],
+)
+def test_escalation_promise_matches_the_next_step(client: TestClient, reason: str, promise: str) -> None:
+    assert tool(client, "escalate", {"merchant_id": "M005", "reason": reason})["result"] == promise
+
+
+def test_above_cap_reason_uses_the_configured_cap(client: TestClient, fake_db: FakeDb, settings: Settings) -> None:
+    settings.goodwill_cap = 150
+    tool(client, "escalate", {"merchant_id": "M004", "reason": "above_cap"})
+    assert last_action(fake_db)["detail"].endswith("(the credit asked is above the ₹150 cap)")
 
 
 def test_restart_fixes_no_network(client: TestClient, fake_db: FakeDb) -> None:

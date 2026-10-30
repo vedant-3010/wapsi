@@ -15,16 +15,16 @@ class BolnaError(RuntimeError):
     pass
 
 
-def start_call(settings: Settings, recipient_phone: str, user_data: dict[str, str]) -> str:
+def start_call(settings: Settings, recipient_phone: str, user_data: dict[str, str], agent_id: str) -> str:
     """POST the call to Bolna and return its execution_id."""
-    if not settings.bolna_api_key or not settings.bolna_agent_id:
+    if not settings.bolna_api_key or not agent_id:
         raise BolnaError("BOLNA_API_KEY and BOLNA_AGENT_ID must be set (or CALL_DRY_RUN=true)")
     try:
         response = httpx.post(
             BOLNA_CALL_URL,
             headers={"Authorization": f"Bearer {settings.bolna_api_key}"},
             json={
-                "agent_id": settings.bolna_agent_id,
+                "agent_id": agent_id,
                 "recipient_phone_number": recipient_phone,
                 "user_data": user_data,
             },
