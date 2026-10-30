@@ -318,6 +318,7 @@ Base URL: the backend Vercel project. All bodies JSON.
 ```
 - Bolna returns `{"message": "done", "status": "queued", "execution_id": "…"}` → save `bolna_execution_id`.
 - Response: `{"call_id": "…", "execution_id": "…", "status": "queued"}`
+- Other errors: 400 no phone and no `DEMO_DEFAULT_PHONE`; 404 unknown merchant; 502 Bolna refused (the calls row gets status `error` and a `call_ended` action says so).
 
 **`POST /api/runs/start`** (F16)
 ```json
@@ -330,11 +331,11 @@ Base URL: the backend Vercel project. All bodies JSON.
 - Response: `{"call_id": "…", "execution_id": "…", "status": "queued", "merchant_id": "M001", "reason": "Silent 4 days · QR −80%"}`
 
 **`POST /api/simulate/next-day`** → see §6. **`POST /api/demo/reset`** → `{"ok": true}`.
-**`POST /api/handoffs/{id}/take`** (F10) → status `taken`, action `human_takeover` (actor human). Response `{"id": "…", "status": "taken"}`.
+**`POST /api/handoffs/{id}/take`** (F10) → status `taken`, action `human_takeover` (actor human). Response `{"id": "…", "status": "taken"}`; 404 unknown, 409 not open.
 
 ### Tool endpoints (Bolna custom functions)
 
-Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body if it exists in `merchants`, else the merchant on the **active call**: the latest call with status not in (`completed`, `failed`, `no-answer`, `busy`, `canceled`, `error`) started in the last 15 minutes. Every response is HTTP 200 `{"result": "<sentence>", ...}`, including malformed bodies and uncaught errors (the tools router's route class turns both into the safe `result`).
+Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body if it exists in `merchants`, else the merchant on the **active call**: the latest call with status not in (`completed`, `failed`, `no-answer`, `busy`, `canceled`, `error`, `stopped`, `balance-low`) started in the last 15 minutes. Every response is HTTP 200 `{"result": "<sentence>", ...}`, including malformed bodies and uncaught errors (the tools router's route class turns both into the safe `result`).
 
 **Reasoning in the feed.** Every tool's action `detail` states the decision and why, as `<Step>: <finding> → <decision> (<why>)`, e.g. "Diagnostics: speaker fault → booking a technician (a remote restart can't fix hardware)". The backend builds it from templates (fault, reason, amounts), never from free LLM text. `result` stays plain words for the merchant; the reasoning is for the team watching the feed.
 
@@ -357,12 +358,13 @@ Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body
 | `above_cap` | "Approve or reject credit" | "the credit asked is above the ₹100 cap" |
 | `fraud_kyc` | "Route to risk team" | "fraud and KYC go to the risk team only" |
 | `fixes_failed` | "Send technician with replacement device" | "two fixes did not work" |
+| anything else | "Senior callback today" | "the agent could not resolve it" (still hands off; never fails) |
 
 ### Webhook
 
 **`POST /api/bolna/webhook?token=$WEBHOOK_SECRET`** (403 on wrong token). Payload = Bolna execution object. Update the `calls` row where `bolna_execution_id = payload.id`. Never insert (`merchant_id` and `phone` are required): no matching row → log a warning and return 200 `{"ok": true, "matched": false}`; Bolna repeats webhooks, so a later one fills the row. Matched → `{"ok": true, "matched": true}` and:
 - `status` ← `status`; `duration_s` ← `conversation_duration`; `cost_cents` ← `total_cost`; `transcript`, `summary`, `raw` ← payload.
-- On a terminal status (`completed`, `failed`, `no-answer`, `busy`, `canceled`, `error`): set `ended_at`; if `conversation_duration` is 0 or missing → outcome `no_answer`; insert one `call_ended` action (only once per call).
+- On a terminal status (the list under Tool endpoints): set `ended_at`; a later non-terminal webhook never reopens the call; if `conversation_duration` is 0 or missing → outcome `no_answer`; insert one `call_ended` action (only once per call).
 - `transcript` is filled only at `completed`; `summary` is null unless call summary is enabled on the agent.
 
 ## 8. Bolna agent

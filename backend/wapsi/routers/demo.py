@@ -15,6 +15,6 @@ router = APIRouter()
 
 @router.post("/api/demo/reset")
 def reset_demo(db: Client = Depends(get_db)) -> OkResponse:
-    db.rpc("seed_demo").execute()
+    db.rpc("seed_demo", {}).execute()
     logger.info("Demo reset: seed_demo() done")
     return OkResponse()

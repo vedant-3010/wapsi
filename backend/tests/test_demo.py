@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from main import app
-from tests.conftest import FakeDb
+from tests.fakedb import FakeDb
 from wapsi.db import DbNotConfigured, get_db
 
 
@@ -9,7 +9,7 @@ def test_reset_demo_calls_seed_demo(client: TestClient, fake_db: FakeDb) -> None
     response = client.post("/api/demo/reset")
     assert response.status_code == 200
     assert response.json() == {"ok": True}
-    assert fake_db.rpc_calls == [("seed_demo", None)]
+    assert fake_db.rpc_calls == [("seed_demo", {})]
 
 
 def test_reset_demo_without_supabase_is_503(client: TestClient) -> None:

@@ -34,9 +34,9 @@ class Settings(BaseSettings):
 
     @property
     def calling_window(self) -> tuple[time, time]:
-        """CALLING_HOURS ("09:00-21:00", IST) as (start, end)."""
-        start, end = self.calling_hours.split("-")
-        return time.fromisoformat(start.strip()), time.fromisoformat(end.strip())
+        """CALLING_HOURS ("09:00-21:00", IST) as (start, end); an end of "24:00" means midnight."""
+        start, end = (part.strip() for part in self.calling_hours.split("-"))
+        return time.fromisoformat(start), time.max if end == "24:00" else time.fromisoformat(end)
 
 
 @lru_cache

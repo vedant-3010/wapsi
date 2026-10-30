@@ -1,15 +1,22 @@
-"""POST /api/calls/start (F2). Stub until PLAN Phase 2."""
+"""POST /api/calls/start (F2): the per-row Call button, also the manual override."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from supabase import Client
 
+from wapsi import calling
+from wapsi.config import Settings, get_settings
+from wapsi.db import get_db
 from wapsi.models import StartCallRequest, StartCallResponse
 
 router = APIRouter()
 
-STUB_CALL_ID = "00000000-0000-0000-0000-000000000000"
-
 
 @router.post("/api/calls/start")
-def start_call(body: StartCallRequest) -> StartCallResponse:
-    # TODO(Phase 2): allowlist + calling-hours checks, calls row, call_started action, Bolna or dry run.
-    return StartCallResponse(call_id=STUB_CALL_ID, execution_id="dry-stub", status="queued")
+def start_call(
+    body: StartCallRequest,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> StartCallResponse:
+    return calling.start_call(
+        db, settings, merchant_id=body.merchant_id.strip().upper(), phone=body.phone, bypass_hours=body.bypass_hours
+    )

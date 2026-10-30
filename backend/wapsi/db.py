@@ -2,8 +2,9 @@
 
 import logging
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
+from postgrest import APIResponse
 from supabase import Client, create_client
 
 from wapsi.config import get_settings
@@ -33,6 +34,11 @@ def get_client() -> Client:
 def get_db() -> Client:
     """FastAPI dependency for routes that use the database; tests override it with a fake."""
     return get_client()
+
+
+def first(response: APIResponse) -> dict[str, Any] | None:
+    """The first row of a query result, or None."""
+    return response.data[0] if response.data else None
 
 
 def ping() -> DbStatus:
