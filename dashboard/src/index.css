@@ -48,6 +48,13 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Status colours are reserved for state (Soundbox light, call pill) and always ship with an icon + label. */
+@theme {
+    --color-good: #3ccf8e;
+    --color-warning: #f5b83d;
+    --color-critical: #f26b6b;
+}
+
 /* Wapsi is always dark: navy (#0B1D45) with the Paytm-blue accent (#00BAF2), matching the pitch deck. */
 :root {
     color-scheme: dark;

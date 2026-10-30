@@ -8,13 +8,27 @@ export type SimulateResponse = { recovered: number; holdout_recovered: number }
 export type TakeHandoffResponse = { id: string; status: 'taken' }
 
 async function post<T>(path: string, body: unknown = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new Error(`Can't reach the backend at ${API_URL}`)
+  }
   if (!response.ok) {
-    throw new Error(`${path} failed (${response.status}): ${await response.text()}`)
+    // FastAPI errors look like {"detail": "Wapsi is already on a call with …"}.
+    const text = await response.text()
+    let detail = text
+    try {
+      const parsed = JSON.parse(text) as { detail?: unknown }
+      if (typeof parsed.detail === 'string') detail = parsed.detail
+    } catch {
+      // not JSON: keep the raw text
+    }
+    throw new Error(detail || `${path} failed (${response.status})`)
   }
   return (await response.json()) as T
 }

@@ -476,7 +476,7 @@ supabase.channel('wapsi')
 | Verified saves | devices `recovered` in cohort `wapsi` |
 | ₹ retained | Verified saves × `monthly_rent` (label: "subscription a month") |
 | Handoffs | `handoffs` with status `open` |
-| Recovery rate (per cohort) | recovered ÷ devices with `at_risk_since` not null, in that cohort (label: "simulated") |
+| Recovery rate | Wapsi: recovered ÷ `wapsi` devices Wapsi has called. Holdout: recovered ÷ `holdout` devices with `at_risk_since` not null. Show n beside each (label: "simulated"). Dividing by all `wapsi` at-risk devices would count merchants nobody has called yet |
 | Cost per verified save | sum(`cost_cents`) ÷ 100 ÷ Verified saves, shown in USD as Bolna reports it |
 
 ## 11. Guardrails
