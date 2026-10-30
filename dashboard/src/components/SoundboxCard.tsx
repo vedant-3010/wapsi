@@ -1,6 +1,6 @@
 import { BadgeCheck, Clock, type LucideIcon, UsersRound, Volume2, VolumeX, Wrench } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
 import { Confetti } from '@/components/kit/Confetti'
 import { Sparkline } from '@/components/kit/Sparkline'
@@ -13,6 +13,18 @@ import { daysSince, formatDayTime, formatRupees } from '@/lib/format'
 import { SPRING_POP } from '@/lib/motion'
 import type { Action, Device, DeviceStatus, Language } from '@/lib/types'
 import { cn } from '@/lib/utils'
+
+// The 3D model (three.js) loads on its own, after the dashboard; the 2D device shows meanwhile.
+const SoundboxModel = lazy(() => import('@/components/soundbox/SoundboxModel'))
+
+function hasWebGL(): boolean {
+  try {
+    const canvas = document.createElement('canvas')
+    return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl'))
+  } catch {
+    return false
+  }
+}
 
 type Look = { label: string; icon: LucideIcon; tone: Tone; led: string; screen: string; display: (days: number) => string }
 
@@ -59,7 +71,6 @@ function Device({ look, ding, days }: { look: Look; ding: { amount: number; at: 
             ))}
         </span>
         <span className="absolute bottom-2.5 text-[8px] font-semibold tracking-[0.25em] text-ink-4">SOUNDBOX</span>
-        {ding && <Confetti key={ding.at} />}
       </motion.div>
       <div className="h-8 w-max min-w-[132px] rounded-[10px] bg-ink-1 px-3 text-center shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)]">
         <AnimatePresence mode="wait" initial={false}>
@@ -92,6 +103,7 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
   // Keyed by id + created_at: a demo reset restarts action ids at 1, so ids alone repeat.
   const seen = useRef<Set<string> | null>(null)
   const [ding, setDing] = useState<{ deviceId: string; amount: number; at: number } | null>(null)
+  const [webgl] = useState(hasWebGL)
   const language: Language = device?.merchants?.language ?? 'hi'
 
   useEffect(() => {
@@ -137,16 +149,62 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
 
   return (
     <Panel title="Virtual Soundbox" aside={<span className="font-mono text-[12px] text-ink-3">{device.id}</span>}>
-      <div className="flex items-center gap-6">
-        <Device look={look} ding={live} days={days} />
+      <div className="relative -mx-6 -mt-1 h-[300px]">
+        {webgl ? (
+          <Suspense
+            fallback={
+              <div className="grid h-full place-items-center">
+                <Device look={look} ding={live} days={days} />
+              </div>
+            }
+          >
+            <SoundboxModel
+              status={device.status}
+              days={days}
+              ding={live}
+              label={`${device.merchants?.name ?? 'Merchant'}'s Soundbox: ${look.label}`}
+            />
+          </Suspense>
+        ) : (
+          <div className="grid h-full place-items-center">
+            <Device look={look} ding={live} days={days} />
+          </div>
+        )}
+        {live && <Confetti key={live.at} />}
+        {webgl && <span className="pointer-events-none absolute right-6 bottom-1 text-[12px] text-ink-4">Drag to turn</span>}
+      </div>
+
+      <div className="mt-1 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="line-clamp-2 font-serif text-[30px] leading-[1.05]">{device.merchants?.name}</div>
-          <motion.span key={device.status} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={SPRING_POP} className={cn('tag mt-2', TAG[look.tone])}>
-            <Icon className="size-3.5" />
-            {look.label}
-          </motion.span>
-          <div className="mt-2 text-[13px] text-ink-3">Last spoke {formatDayTime(device.last_announced_at)}</div>
+          <div className="mt-1 text-[13px] text-ink-3">Last spoke {formatDayTime(device.last_announced_at)}</div>
         </div>
+        <AnimatePresence mode="wait" initial={false}>
+          {live ? (
+            <motion.span
+              key="paid"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              transition={SPRING_POP}
+              className={cn('tag mt-1 shrink-0 text-[14px]', TAG.sage)}
+            >
+              <Volume2 className="size-3.5" />
+              {live.amount ? `${formatRupees(live.amount)} received` : 'Payment received'}
+            </motion.span>
+          ) : (
+            <motion.span
+              key={device.status}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={SPRING_POP}
+              className={cn('tag mt-1 shrink-0', TAG[look.tone])}
+            >
+              <Icon className="size-3.5" />
+              {look.label}
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
 
       {series && series.length > 1 && (
