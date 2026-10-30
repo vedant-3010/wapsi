@@ -1,47 +1,59 @@
+import { motion } from 'motion/react'
+
+import { AnimatedNumber } from '@/components/kit/AnimatedNumber'
 import { Panel } from '@/components/Panel'
 import { formatPercent, formatRupees, formatUsd } from '@/lib/format'
 import type { Kpis } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-function Meter({ label, value, accent }: { label: string; value: number | null; accent: boolean }) {
+const rupees = (n: number) => formatRupees(Math.round(n))
+
+function Meter({ label, n, value, accent }: { label: string; n: number; value: number | null; accent: boolean }) {
   return (
-    <div title={value === null ? 'No devices yet' : `${label}: ${formatPercent(value)} recovered`}>
-      <div className="flex items-baseline justify-between text-sm">
-        <span>{label}</span>
-        <span className="text-lg font-semibold tabular-nums">{value === null ? '—' : formatPercent(value)}</span>
+    <div title={value === null ? 'No devices yet' : `${formatPercent(value)} of ${n} recovered`}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[14px] text-fg-2">
+          {label} <span className="font-mono text-[11px] text-fg-3">n={n}</span>
+        </span>
+        <span className={cn('font-mono text-lg font-medium tabular-nums', accent ? 'text-paytm' : 'text-fg-1')}>
+          {value === null ? '—' : formatPercent(value)}
+        </span>
       </div>
       {/* The track is a lighter step of the fill's own colour. */}
-      <div className={cn('mt-1 h-2.5 overflow-hidden rounded-full', accent ? 'bg-primary/20' : 'bg-muted-foreground/20')}>
-        <div
-          className={cn('h-full rounded-full transition-[width] duration-300', accent ? 'bg-primary' : 'bg-muted-foreground')}
-          style={{ width: `${Math.round((value ?? 0) * 100)}%` }}
+      <div className={cn('mt-1.5 h-2 overflow-hidden rounded-full', accent ? 'bg-paytm/15' : 'bg-fg-3/15')}>
+        <motion.div
+          className={cn('h-full rounded-full', accent ? 'bg-paytm' : 'bg-fg-3')}
+          initial={false}
+          animate={{ width: `${Math.round((value ?? 0) * 100)}%` }}
+          transition={{ type: 'spring', stiffness: 120, damping: 20 }}
         />
       </div>
     </div>
   )
 }
 
-// F11 (SPEC §10): Wapsi vs the holdout it never called, and what each save is worth.
+// F11 (SPEC §10): merchants Wapsi called vs the holdout it never calls, and what a save is worth.
 export function ImpactPanel({ kpis }: { kpis: Kpis }) {
   return (
-    <Panel title="Impact" aside={<span className="text-xs text-muted-foreground">simulated</span>}>
-      <div className="text-sm text-muted-foreground">Recovery rate</div>
-      <div className="mt-2 flex flex-col gap-3">
-        <Meter label={`Called by Wapsi · n=${kpis.wapsiCount}`} value={kpis.wapsiRate} accent />
-        <Meter label={`Holdout, not called · n=${kpis.holdoutCount}`} value={kpis.holdoutRate} accent={false} />
+    <Panel title="Impact" aside={<span className="caption">Simulated</span>}>
+      <div className="flex flex-col gap-3.5">
+        <Meter label="Called by Wapsi" n={kpis.wapsiCount} value={kpis.wapsiRate} accent />
+        <Meter label="Holdout, not called" n={kpis.holdoutCount} value={kpis.holdoutRate} accent={false} />
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3">
+      <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-line pt-3.5">
         <div>
-          <dt className="text-sm text-muted-foreground">₹ retained</dt>
-          <dd className="text-xl font-semibold tabular-nums">{formatRupees(kpis.retained)}</dd>
-          <dd className="text-xs text-muted-foreground">subscription a month</dd>
+          <dt className="caption">₹ retained</dt>
+          <dd className="mt-1 text-2xl font-semibold">
+            <AnimatedNumber value={kpis.retained} format={rupees} />
+          </dd>
+          <dd className="text-[12px] text-fg-3">subscription a month</dd>
         </div>
         <div>
-          <dt className="text-sm text-muted-foreground">Cost per verified save</dt>
-          <dd className="text-xl font-semibold tabular-nums">
+          <dt className="caption">Cost per save</dt>
+          <dd className="mt-1 text-2xl font-semibold tabular-nums">
             {kpis.costPerSaveUsd === null ? '—' : formatUsd(kpis.costPerSaveUsd)}
           </dd>
-          <dd className="text-xs text-muted-foreground">Bolna call cost</dd>
+          <dd className="text-[12px] text-fg-3">Bolna call cost</dd>
         </div>
       </dl>
     </Panel>

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { api } from '@/lib/api'
 import { startOfTodayIst } from '@/lib/format'
 import { supabase } from '@/lib/supabase'
-import type { Action, Call, Device, Handoff, Kpis, RiskRow } from '@/lib/types'
+import type { Action, Call, Device, Handoff, Kpis, PublicConfig, RiskRow, VolumeSeries } from '@/lib/types'
 import { TERMINAL_STATUSES } from '@/lib/types'
 
 export type Dashboard = {
@@ -11,9 +12,23 @@ export type Dashboard = {
   feed: Action[]
   device: Device | null
   handoffs: Handoff[]
+  series: Record<string, number[]>
   kpis: Kpis
   loaded: boolean
   error: string | null
+}
+
+const EMPTY_KPIS: Kpis = {
+  atRisk: 0,
+  callsToday: 0,
+  verifiedSaves: 0,
+  retained: 0,
+  openHandoffs: 0,
+  wapsiRate: null,
+  wapsiCount: 0,
+  holdoutRate: null,
+  holdoutCount: 0,
+  costPerSaveUsd: null,
 }
 
 const EMPTY: Dashboard = {
@@ -22,29 +37,26 @@ const EMPTY: Dashboard = {
   feed: [],
   device: null,
   handoffs: [],
-  kpis: {
-    atRisk: 0,
-    callsToday: 0,
-    verifiedSaves: 0,
-    retained: 0,
-    openHandoffs: 0,
-    wapsiRate: null,
-    wapsiCount: 0,
-    holdoutRate: null,
-    holdoutCount: 0,
-    costPerSaveUsd: null,
-  },
+  series: {},
+  kpis: EMPTY_KPIS,
   loaded: false,
   error: null,
 }
 
-const ACTION_COLUMNS = 'id,call_id,merchant_id,device_id,type,detail,actor,created_at'
+const ACTION_COLUMNS = 'id,call_id,merchant_id,device_id,type,detail,actor,payload,created_at'
+const CALL_COLUMNS =
+  'id,merchant_id,device_id,phone,bolna_execution_id,status,started_at,ended_at,duration_s,transcript,summary,' +
+  'outcome,recording_url:raw->telephony_data->>recording_url,merchants(name,owner_name,area,language)'
 const FALLBACK_POLL_MS = 3000
+const ACTIVE_WINDOW_MS = 15 * 60 * 1000
+const QUEUED_GRACE_MS = 2 * 60 * 1000
 
-/** The live call is the latest call that hasn't finished (and isn't stale). */
+/** Same rule as the backend (wapsi/context.py): not final, recent, and not stuck in "queued". */
 export function isCallActive(call: Call | null): boolean {
   if (!call || TERMINAL_STATUSES.includes(call.status)) return false
-  return Date.now() - new Date(call.started_at).getTime() < 15 * 60 * 1000
+  const age = Date.now() - new Date(call.started_at).getTime()
+  if (call.status === 'queued' && age > QUEUED_GRACE_MS) return false
+  return age < ACTIVE_WINDOW_MS
 }
 
 type CohortDevice = {
@@ -87,6 +99,10 @@ function computeKpis(
 export function useDashboard() {
   const [data, setData] = useState<Dashboard>(EMPTY)
   const [realtime, setRealtime] = useState(false)
+  // Guardrails from the backend (Safety strip). Fetched apart from the Supabase reads so a cold
+  // backend never slows the live feed.
+  const [config, setConfig] = useState<PublicConfig | null>(null)
+  const loadConfig = useCallback(() => api.config().then(setConfig, () => undefined), [])
   const callRef = useRef<Call | null>(null)
   const timer = useRef<number | undefined>(undefined)
 
@@ -94,7 +110,7 @@ export function useDashboard() {
     const [queue, calls, handoffs, cohortDevices, costs, today] = await Promise.all([
       supabase.from('risk_queue').select('*').order('risk_score', { ascending: false })
         .order('days_silent', { ascending: false }),
-      supabase.from('calls').select('*, merchants(name, language)').order('started_at', { ascending: false }).limit(1),
+      supabase.from('calls').select(CALL_COLUMNS).order('started_at', { ascending: false }).limit(1),
       supabase.from('handoffs').select('*, merchants(name)').eq('status', 'open')
         .order('created_at', { ascending: false }),
       supabase.from('devices').select('id, status, monthly_rent, merchants!inner(cohort)')
@@ -109,33 +125,35 @@ export function useDashboard() {
       return
     }
 
-    const call = (calls.data?.[0] as Call | undefined) ?? null
+    const call = ((calls.data as unknown as Call[] | null) ?? [])[0] ?? null
     callRef.current = call
-    let feed: Action[] = []
-    let device: Device | null = null
-    if (call) {
-      // This call's actions, plus system actions after it started (technician visit, payments resumed).
-      const [actions, devices] = await Promise.all([
-        supabase.from('actions').select(ACTION_COLUMNS)
-          .or(`call_id.eq.${call.id},and(call_id.is.null,created_at.gte."${call.started_at}")`)
-          .order('id').limit(100),
-        call.device_id
-          ? supabase.from('devices').select('id, merchant_id, status, last_announced_at, merchants(name)')
-            .eq('id', call.device_id).limit(1)
-          : Promise.resolve({ data: [], error: null }),
-      ])
-      feed = (actions.data as Action[] | null) ?? []
-      device = ((devices.data as Device[] | null) ?? [])[0] ?? null
-    }
-
     const queueRows = (queue.data as RiskRow[] | null) ?? []
+    const deviceIds = [...new Set([...queueRows.map((r) => r.device_id), ...(call?.device_id ? [call.device_id] : [])])]
+
+    const [actions, devices, volumes] = await Promise.all([
+      call
+        ? // This call's actions, plus system actions after it started (technician visit, payments resumed).
+          supabase.from('actions').select(ACTION_COLUMNS)
+            .or(`call_id.eq.${call.id},and(call_id.is.null,created_at.gte."${call.started_at}")`)
+            .order('id').limit(100)
+        : Promise.resolve({ data: [] }),
+      call?.device_id
+        ? supabase.from('devices').select('id, merchant_id, status, last_announced_at, merchants(name, language)')
+            .eq('id', call.device_id).limit(1)
+        : Promise.resolve({ data: [] }),
+      deviceIds.length
+        ? supabase.from('volume_series').select('device_id, days, txns').in('device_id', deviceIds)
+        : Promise.resolve({ data: [] }),
+    ])
+
     const handoffRows = (handoffs.data as Handoff[] | null) ?? []
     setData({
       queue: queueRows,
       call,
-      feed,
-      device,
+      feed: (actions.data as Action[] | null) ?? [],
+      device: ((devices.data as Device[] | null) ?? [])[0] ?? null,
       handoffs: handoffRows,
+      series: Object.fromEntries(((volumes.data as VolumeSeries[] | null) ?? []).map((v) => [v.device_id, v.txns])),
       kpis: computeKpis(queueRows, today.count ?? 0, (cohortDevices.data as CohortDevice[] | null) ?? [],
         costs.data ?? [], handoffRows.length),
       loaded: true,
@@ -151,6 +169,7 @@ export function useDashboard() {
 
   useEffect(() => {
     void load()
+    void loadConfig()
     const channel = supabase
       .channel('wapsi')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'actions' }, (payload) => {
@@ -159,7 +178,9 @@ export function useDashboard() {
         // Append straight away so the feed moves during the call; the refetch fills in the rest.
         if (call && (action.call_id === call.id || action.call_id === null)) {
           setData((prev) =>
-            prev.feed.some((a) => a.id === action.id) ? prev : { ...prev, feed: [...prev.feed, action] },
+            prev.feed.some((a) => a.id === action.id && a.created_at === action.created_at)
+              ? prev
+              : { ...prev, feed: [...prev.feed, action] },
           )
         }
         refresh()
@@ -167,12 +188,16 @@ export function useDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'calls' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'devices' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'handoffs' }, refresh)
-      .subscribe((status) => setRealtime(status === 'SUBSCRIBED'))
+      .subscribe((status) => {
+        const live = status === 'SUBSCRIBED'
+        setRealtime(live)
+        if (live) refresh() // catch up on anything missed while disconnected
+      })
     return () => {
       window.clearTimeout(timer.current)
       void supabase.removeChannel(channel)
     }
-  }, [load, refresh])
+  }, [load, loadConfig, refresh])
 
   // No polling while Realtime is up. If the venue network blocks the websocket, keep the demo moving.
   useEffect(() => {
@@ -181,5 +206,9 @@ export function useDashboard() {
     return () => window.clearInterval(id)
   }, [realtime, load])
 
-  return { ...data, realtime, refresh: load }
+  const reload = useCallback(async () => {
+    await Promise.all([load(), loadConfig()])
+  }, [load, loadConfig])
+
+  return { ...data, config, realtime, refresh: reload }
 }

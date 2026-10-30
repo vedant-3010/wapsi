@@ -1,5 +1,7 @@
 // Writes go through the backend only; the dashboard's Supabase key is read-only. Shapes follow SPEC §7.
 
+import type { PublicConfig } from '@/lib/types'
+
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 
 export type StartCallResponse = { call_id: string; execution_id: string; status: string }
@@ -34,6 +36,11 @@ async function post<T>(path: string, body: unknown = {}): Promise<T> {
 }
 
 export const api = {
+  config: async (): Promise<PublicConfig> => {
+    const response = await fetch(`${API_URL}/api/config`)
+    if (!response.ok) throw new Error(`/api/config failed (${response.status})`)
+    return (await response.json()) as PublicConfig
+  },
   startRun: () => post<StartRunResponse>('/api/runs/start'),
   startCall: (merchantId: string, phone?: string, bypassHours = false) =>
     post<StartCallResponse>('/api/calls/start', { merchant_id: merchantId, phone, bypass_hours: bypassHours }),

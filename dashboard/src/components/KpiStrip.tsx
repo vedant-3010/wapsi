@@ -1,32 +1,34 @@
-import { motion } from 'motion/react'
-
+import { AnimatedNumber } from '@/components/kit/AnimatedNumber'
 import { formatRupees } from '@/lib/format'
 import type { Kpis } from '@/lib/types'
+import { cn } from '@/lib/utils'
 
-// Definitions: SPEC §10. A value that changes ticks in, so judges see the KPI move.
+const plain = (n: number) => String(Math.round(n))
+const rupees = (n: number) => formatRupees(Math.round(n))
+
+// SPEC §10. The two outcome figures wear the brand colour once they're above zero.
 export function KpiStrip({ kpis }: { kpis: Kpis }) {
   const tiles = [
-    { label: 'At risk', value: String(kpis.atRisk) },
-    { label: 'Calls today', value: String(kpis.callsToday) },
-    { label: 'Verified saves', value: String(kpis.verifiedSaves) },
-    { label: '₹ retained', value: formatRupees(kpis.retained), note: 'subscription a month' },
-    { label: 'Handoffs', value: String(kpis.openHandoffs), note: 'open' },
+    { label: 'At risk', value: kpis.atRisk, note: 'Soundboxes in the queue', format: plain },
+    { label: 'Calls today', value: kpis.callsToday, note: 'IST', format: plain },
+    { label: 'Verified saves', value: kpis.verifiedSaves, note: 'payments resumed', format: plain, key: true },
+    { label: '₹ retained', value: kpis.retained, note: 'subscription a month', format: rupees, key: true },
+    { label: 'Handoffs', value: kpis.openHandoffs, note: 'waiting for a person', format: plain },
   ]
   return (
-    <section className="grid grid-cols-2 gap-4 md:grid-cols-5">
-      {tiles.map(({ label, value, note }) => (
-        <div key={label} className="rounded-xl bg-card px-5 py-4 ring-1 ring-foreground/10">
-          <div className="text-sm text-muted-foreground">{label}</div>
-          <motion.div
-            key={value}
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="mt-1 text-4xl font-semibold tabular-nums"
-          >
-            {value}
-          </motion.div>
-          {note && <div className="text-xs text-muted-foreground">{note}</div>}
+    <section className="glass grid grid-cols-2 overflow-hidden rounded-card border border-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
+      {tiles.map((tile) => (
+        <div key={tile.label} className="relative px-5 py-4">
+          <div className="caption">{tile.label}</div>
+          <AnimatedNumber
+            value={tile.value}
+            format={tile.format}
+            className={cn(
+              'mt-1.5 text-[40px] leading-none font-semibold tracking-tight transition-colors duration-500',
+              tile.key && tile.value > 0 ? 'text-paytm' : 'text-fg-1',
+            )}
+          />
+          <div className="mt-1.5 text-[13px] text-fg-3">{tile.note}</div>
         </div>
       ))}
     </section>

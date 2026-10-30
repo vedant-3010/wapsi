@@ -32,3 +32,6 @@ export const formatPercent = (ratio: number) => `${Math.round(ratio * 100)}%`
 
 /** Midnight in Asia/Kolkata today, as an ISO timestamp ("Calls today", SPEC §10). */
 export const startOfTodayIst = () => new Date(`${isoDay.format(new Date())}T00:00:00+05:30`).toISOString()
+
+/** Whole days since a timestamp (like risk_queue's days_silent). */
+export const daysSince = (value: string) => Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000))
