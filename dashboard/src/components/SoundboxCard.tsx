@@ -2,7 +2,10 @@ import { BadgeCheck, Clock, type LucideIcon, UsersRound, Volume2, VolumeX, Wrenc
 import { AnimatePresence, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
 
+import { Confetti } from '@/components/kit/Confetti'
 import { Sparkline } from '@/components/kit/Sparkline'
+import { type Tone } from '@/components/kit/StatusDot'
+import { TAG } from '@/lib/tones'
 import { Panel } from '@/components/Panel'
 import { useAnnouncer } from '@/hooks/useAnnouncer'
 import { paymentAmount } from '@/lib/feed'
@@ -11,46 +14,54 @@ import { SPRING_POP } from '@/lib/motion'
 import type { Action, Device, DeviceStatus, Language } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-type Look = { label: string; icon: LucideIcon; led: string; text: string; display: (days: number) => string }
+type Look = { label: string; icon: LucideIcon; tone: Tone; led: string; screen: string; display: (days: number) => string }
 
 const LOOKS: Record<DeviceStatus, Look> = {
-  at_risk: { label: 'Silent', icon: VolumeX, led: 'bg-danger', text: 'text-danger', display: (d) => `Silent · ${d} days` },
-  fix_scheduled: { label: 'Fix scheduled', icon: Wrench, led: 'bg-warn', text: 'text-warn', display: () => 'Technician booked' },
-  awaiting_verification: {
-    label: 'Awaiting payments', icon: Clock, led: 'bg-warn', text: 'text-warn', display: () => 'Waiting for payments',
+  at_risk: { label: 'Silent', icon: VolumeX, tone: 'coral', led: 'bg-coral-mid', screen: 'text-coral-mid', display: (d) => `Silent · ${d} days` },
+  fix_scheduled: {
+    label: 'Fix scheduled', icon: Wrench, tone: 'amber', led: 'bg-amber-mid', screen: 'text-amber-mid', display: () => 'Technician booked',
   },
-  handed_off: { label: 'With a person', icon: UsersRound, led: 'bg-fg-3', text: 'text-fg-2', display: () => 'Senior callback' },
-  recovered: { label: 'Recovered (verified)', icon: BadgeCheck, led: 'bg-ok', text: 'text-ok', display: () => 'Payments back' },
-  healthy: { label: 'Healthy', icon: Volume2, led: 'bg-ok', text: 'text-ok', display: () => 'Speaking' },
+  awaiting_verification: {
+    label: 'Awaiting payments', icon: Clock, tone: 'amber', led: 'bg-amber-mid', screen: 'text-amber-mid',
+    display: () => 'Waiting for payments',
+  },
+  handed_off: { label: 'With a person', icon: UsersRound, tone: 'idle', led: 'bg-ink-4', screen: 'text-ink-4', display: () => 'Senior callback' },
+  recovered: {
+    label: 'Recovered, verified', icon: BadgeCheck, tone: 'sage', led: 'bg-sage-mid', screen: 'text-sage-mid', display: () => 'Payments back',
+  },
+  healthy: { label: 'Healthy', icon: Volume2, tone: 'sage', led: 'bg-sage-mid', screen: 'text-sage-mid', display: () => 'Speaking' },
 }
 
-/** The device itself: grille, LED and a little display. It rings when a payment lands. */
+/** The device itself: a soft porcelain speaker with an LED and a small screen. */
 function Device({ look, ding, days }: { look: Look; ding: { amount: number; at: number } | null; days: number }) {
   return (
-    <div className="flex flex-col items-center gap-2.5">
-      <div
+    <div className="relative flex flex-col items-center gap-3">
+      <motion.div
+        key={ding?.at ?? 'idle'}
+        animate={ding ? { rotate: [0, -4, 4, -2, 0], y: [0, -4, 0] } : {}}
+        transition={{ duration: 0.6 }}
         className={cn(
-          'relative grid size-[112px] place-items-center rounded-[28px] border border-line-strong',
-          'bg-[linear-gradient(160deg,#1a2440_0%,#0b1124_70%)]',
-          'shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_18px_36px_-14px_rgb(0_0_0/0.9)]',
+          'relative grid size-[118px] place-items-center rounded-[32px] border border-line-strong',
+          'bg-[linear-gradient(160deg,#ffffff_0%,#efebe3_100%)]',
+          'shadow-[inset_0_2px_0_#fff,inset_0_-8px_16px_rgb(34_32_29/0.06),0_20px_34px_-18px_rgb(34_32_29/0.45)]',
           ding && 'animate-flash-ok',
         )}
-        key={ding?.at ?? 'idle'}
       >
-        <span className={cn('absolute top-3 h-1 w-9 rounded-full transition-colors duration-500', look.led)} />
-        <span className="relative size-[68px] rounded-full border border-line bg-black/30 grille">
+        <span className={cn('absolute top-3.5 h-1.5 w-10 rounded-full transition-colors duration-500', look.led)} />
+        <span className="relative size-[70px] rounded-full bg-paper-3 grille shadow-[inset_0_2px_6px_rgb(34_32_29/0.12)]">
           {ding &&
             [0, 1, 2].map((i) => (
               <span
                 key={i}
-                className="absolute inset-0 rounded-full border-2 border-ok animate-ripple"
+                className="absolute inset-0 rounded-full border-2 border-sage-mid animate-ripple"
                 style={{ animationDelay: `${i * 260}ms` }}
               />
             ))}
         </span>
-        <span className="absolute bottom-2 font-mono text-[8px] tracking-[0.2em] text-fg-4">SOUNDBOX</span>
-      </div>
-      <div className="h-7 w-max min-w-[120px] rounded-md border border-line bg-black/40 px-2.5 text-center">
+        <span className="absolute bottom-2.5 text-[8px] font-semibold tracking-[0.25em] text-ink-4">SOUNDBOX</span>
+        {ding && <Confetti key={ding.at} />}
+      </motion.div>
+      <div className="h-8 w-max min-w-[132px] rounded-[10px] bg-ink-1 px-3 text-center shadow-[inset_0_1px_3px_rgb(0_0_0/0.4)]">
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
             key={ding ? `paid-${ding.at}` : look.label}
@@ -58,7 +69,7 @@ function Device({ look, ding, days }: { look: Look; ding: { amount: number; at: 
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
-            className={cn('block font-mono text-[12px] leading-7 whitespace-nowrap uppercase', ding ? 'text-ok' : look.text)}
+            className={cn('block font-mono text-[12px] leading-8 whitespace-nowrap', ding ? 'text-sage-mid' : look.screen)}
           >
             {ding ? (ding.amount ? `${formatRupees(ding.amount)} received` : 'Payment received') : look.display(days)}
           </motion.span>
@@ -75,7 +86,7 @@ type SoundboxCardProps = {
   loaded: boolean
 }
 
-// F9. The Soundbox of the latest call. When its payments resume it chimes and says the amount.
+// F9. The Soundbox of the latest call. When its payments resume it chimes, says the amount and celebrates.
 export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps) {
   const announce = useAnnouncer()
   // Keyed by id + created_at: a demo reset restarts action ids at 1, so ids alone repeat.
@@ -109,7 +120,9 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
   if (!device) {
     return (
       <Panel title="Virtual Soundbox">
-        <p className="text-[15px] text-fg-3">The Soundbox of the merchant Wapsi calls appears here, and speaks when payments return.</p>
+        <p className="text-[15px] leading-relaxed text-ink-3">
+          The Soundbox of the merchant Wapsi calls appears here, and speaks when their payments come back.
+        </p>
       </Panel>
     )
   }
@@ -123,32 +136,26 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
   const after = series?.length ? series[series.length - 1] : null
 
   return (
-    <Panel title="Virtual Soundbox" aside={<span className="caption">{device.id}</span>}>
-      <div className="flex items-center gap-5">
+    <Panel title="Virtual Soundbox" aside={<span className="font-mono text-[12px] text-ink-3">{device.id}</span>}>
+      <div className="flex items-center gap-6">
         <Device look={look} ding={live} days={days} />
         <div className="min-w-0">
-          <div className="line-clamp-2 font-serif text-[26px] leading-[1.1]">{device.merchants?.name}</div>
-          <motion.div
-            key={device.status}
-            initial={{ opacity: 0, x: -6 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={SPRING_POP}
-            className={cn('mt-1 flex items-center gap-1.5 text-[15px] font-medium', look.text)}
-          >
-            <Icon className="size-4" />
+          <div className="line-clamp-2 font-serif text-[30px] leading-[1.05]">{device.merchants?.name}</div>
+          <motion.span key={device.status} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={SPRING_POP} className={cn('tag mt-2', TAG[look.tone])}>
+            <Icon className="size-3.5" />
             {look.label}
-          </motion.div>
-          <div className="mt-1 text-[13px] text-fg-3">Last spoke {formatDayTime(device.last_announced_at)}</div>
+          </motion.span>
+          <div className="mt-2 text-[13px] text-ink-3">Last spoke {formatDayTime(device.last_announced_at)}</div>
         </div>
       </div>
 
       {series && series.length > 1 && (
-        <div className="mt-4 border-t border-line pt-3">
+        <div className="mt-5 border-t border-line pt-4">
           <div className="flex items-baseline justify-between">
-            <span className="caption">QR payments · {series.length} days</span>
+            <span className="caption">QR payments, last {series.length} days</span>
             {before !== null && after !== null && (
-              <span className="font-mono text-[12px] text-fg-2 tabular-nums">
-                {before}/day → <span className={today ? 'text-ok' : 'text-danger'}>{after}</span>
+              <span className="text-[13px] text-ink-2 tabular-nums">
+                {before}/day → <span className={cn('font-semibold', today ? 'text-sage' : 'text-coral')}>{after}</span>
               </span>
             )}
           </div>
@@ -158,8 +165,8 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
             area
             stretch
             width={320}
-            height={56}
-            className="mt-2 text-fg-3"
+            height={60}
+            className="mt-2 text-ink-4"
             label={`QR payments per day over ${series.length} days`}
           />
         </div>

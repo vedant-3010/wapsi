@@ -447,17 +447,19 @@ The others follow the same shape (pre-call messages are spoken by Sarvam, so the
 
 ## 9. Dashboard
 
-One screen. Design system "Night shift" (tokens in `dashboard/src/index.css`): frosted glass on the deck's navy darkened to near-black, 1px hairlines, grayscale text; Paytm blue (`#00BAF2`) marks what's live or most important; ok / warn / danger mark state, always with an icon or word. Geist for UI, Geist Mono captions and numbers, Instrument Serif for display moments. Lively only on change (springs, one-shot keyframes); nothing loops unless a call is live; reduced motion turns it off.
+One screen. Design system "Soft paper" (tokens in `dashboard/src/index.css`), after Notion's warm ink and pastel tags and CRED's NeoPOP press: warm off-white paper with a faint grain, white cards on soft shadows, warm ink text. Colour is a quiet signal, never decoration: sage = good, amber = waiting / a person, coral = risk, always with a word. Paytm blue is a hint only (the mark's dot, the main button's edge, one confetti colour). Instrument Serif for headlines and big numbers, Geist for UI, Geist Mono only for times and IDs. Lively only on change: cards lift, the main button presses into its edge, steps spring in with a marker-pen highlight, numbers count up, a recovery throws confetti; nothing loops unless a call is live; reduced motion turns it off. Light theme: it reads better on a projector.
 
 ```
 ┌ TopBar: Wapsi · Live updates · Dry run/Real calls   [Reset demo] [Simulate next day] [▶ Start Wapsi's run] ┐
 │ Safety strip (F15): allowlist size · calling hours (open now) · credit cap · every action logged          │
 ├ KPI strip: At risk · Calls today · Verified saves · ₹ retained · Handoffs (numbers count up, "+1" floats) ┤
 ├ At-risk queue (F1)        │ Live call (F5, F6)                     │ Virtual Soundbox (F9)  ┤
-│ All/Wapsi/Holdout filter  │ sticky header: merchant, language,     │ device, LED, display,  │
+│ All/Wapsi/Holdout filter  │ sticky header: merchant, language,     │ porcelain device, LED, │
 │ risk ring · signal chips  │ masked phone, timer, outcome           │ 30-day chart           │
 │ 30-day sparkline · Call   │ timeline: finding → decision · Why     │ Handoff queue (F10)    │
-│ "On call" on the live row │ summary · recording · transcript chat  │ Impact (F11)           │
+│ row click → merchant      │ summary · recording · transcript chat  │ Impact (F11)           │
+│ drawer (30-day bars, facts│                                        │                        │
+│ what Wapsi did, Call)     │                                        │                        │
 └───────────────────────────┴────────────────────────────────────────┴────────────────────────┘
 ```
 

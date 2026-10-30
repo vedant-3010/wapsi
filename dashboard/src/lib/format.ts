@@ -35,3 +35,6 @@ export const startOfTodayIst = () => new Date(`${isoDay.format(new Date())}T00:0
 
 /** Whole days since a timestamp (like risk_queue's days_silent). */
 export const daysSince = (value: string) => Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86_400_000))
+
+/** Today in UTC (the database's current_date), as YYYY-MM-DD. */
+export const utcToday = () => new Date().toISOString().slice(0, 10)

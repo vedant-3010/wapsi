@@ -12,17 +12,17 @@ type PanelProps = {
   scroll?: boolean
 }
 
-/** A glass card with a mono caption header. */
+/** A white card on the paper, with a quiet title. */
 export function Panel({ title, aside, children, className, bodyClassName, scroll = false }: PanelProps) {
   return (
-    <section className={cn('glass flex min-h-0 flex-col rounded-card border border-line', className)}>
-      <header className="flex min-h-12 flex-wrap items-center justify-between gap-3 px-5 pt-4 pb-2">
-        <h2 className="caption text-fg-2">{title}</h2>
+    <section className={cn('card flex min-h-0 flex-col rounded-card', className)}>
+      <header className="flex min-h-14 flex-wrap items-center justify-between gap-3 px-6 pt-5 pb-2">
+        <h2 className="text-[15px] font-semibold tracking-tight text-ink-1">{title}</h2>
         {aside}
       </header>
       <div
         data-scroll={scroll || undefined}
-        className={cn('px-5 pb-5', scroll && 'min-h-0 flex-1 overflow-y-auto', bodyClassName)}
+        className={cn('px-6 pb-6', scroll && 'min-h-0 flex-1 overflow-y-auto', bodyClassName)}
       >
         {children}
       </div>

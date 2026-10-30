@@ -41,7 +41,7 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="mx-auto flex min-h-svh max-w-[1720px] flex-col gap-4 px-4 pb-4 lg:h-svh lg:px-6 lg:pb-5">
+      <div className="mx-auto flex min-h-svh max-w-[1760px] flex-col gap-5 px-4 pb-5 lg:h-svh lg:px-8 lg:pb-7">
         <TopBar
           pending={pending}
           failed={failed}
@@ -57,12 +57,12 @@ export default function App() {
           }
         />
         {dash.error && (
-          <div className="rounded-control border border-danger/40 bg-danger/10 px-4 py-2 text-sm text-danger">
+          <div className="rounded-control bg-coral-soft px-4 py-2.5 text-[14px] text-coral">
             Can’t read Supabase: {dash.error}
           </div>
         )}
         <KpiStrip kpis={dash.kpis} />
-        <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-4 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,0.92fr)]">
+        <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-5 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)_minmax(0,0.92fr)]">
           <QueuePanel
             queue={dash.queue}
             series={dash.series}
@@ -73,7 +73,7 @@ export default function App() {
             }
           />
           <LiveCall call={dash.call} feed={dash.feed} active={callActive} className="min-h-[60svh] lg:min-h-0" />
-          <div className="flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto [&>*]:shrink-0">
+          <div className="-m-2 flex flex-col gap-5 p-2 lg:min-h-0 lg:overflow-y-auto [&>*]:shrink-0">
             <SoundboxCard
               device={dash.device}
               feed={dash.feed}
@@ -94,12 +94,12 @@ export default function App() {
         </main>
       </div>
       <Toaster
-        theme="dark"
+        theme="light"
         position="bottom-left"
         toastOptions={{
           classNames: {
-            toast: '!glass-menu !rounded-card !border !border-line-strong !shadow-pop !text-fg-1 !font-sans !text-[15px]',
-            description: '!text-fg-2',
+            toast: '!bg-paper !rounded-[16px] !border !border-line !shadow-pop !text-ink-1 !font-sans !text-[15px]',
+            description: '!text-ink-2',
           },
         }}
       />

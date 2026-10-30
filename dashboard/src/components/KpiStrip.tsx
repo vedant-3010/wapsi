@@ -6,29 +6,29 @@ import { cn } from '@/lib/utils'
 const plain = (n: number) => String(Math.round(n))
 const rupees = (n: number) => formatRupees(Math.round(n))
 
-// SPEC §10. The two outcome figures wear the brand colour once they're above zero.
+// SPEC §10. Editorial numerals; the two outcome figures turn sage once they're above zero.
 export function KpiStrip({ kpis }: { kpis: Kpis }) {
   const tiles = [
     { label: 'At risk', value: kpis.atRisk, note: 'Soundboxes in the queue', format: plain },
-    { label: 'Calls today', value: kpis.callsToday, note: 'IST', format: plain },
-    { label: 'Verified saves', value: kpis.verifiedSaves, note: 'payments resumed', format: plain, key: true },
-    { label: '₹ retained', value: kpis.retained, note: 'subscription a month', format: rupees, key: true },
+    { label: 'Calls today', value: kpis.callsToday, note: 'India time', format: plain },
+    { label: 'Verified saves', value: kpis.verifiedSaves, note: 'payments resumed', format: plain, outcome: true },
+    { label: '₹ retained', value: kpis.retained, note: 'subscription a month', format: rupees, outcome: true },
     { label: 'Handoffs', value: kpis.openHandoffs, note: 'waiting for a person', format: plain },
   ]
   return (
-    <section className="glass grid grid-cols-2 overflow-hidden rounded-card border border-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
+    <section className="card grid grid-cols-2 overflow-hidden rounded-card sm:grid-cols-3 lg:grid-cols-5 lg:divide-x lg:divide-line">
       {tiles.map((tile) => (
-        <div key={tile.label} className="relative px-5 py-4">
+        <div key={tile.label} className="px-6 py-5">
           <div className="caption">{tile.label}</div>
           <AnimatedNumber
             value={tile.value}
             format={tile.format}
             className={cn(
-              'mt-1.5 text-[40px] leading-none font-semibold tracking-tight transition-colors duration-500',
-              tile.key && tile.value > 0 ? 'text-paytm' : 'text-fg-1',
+              'mt-1 font-serif text-[54px] leading-[0.95] tracking-tight transition-colors duration-500',
+              tile.outcome && tile.value > 0 ? 'text-sage' : 'text-ink-1',
             )}
           />
-          <div className="mt-1.5 text-[13px] text-fg-3">{tile.note}</div>
+          <div className="mt-1.5 text-[13px] text-ink-3">{tile.note}</div>
         </div>
       ))}
     </section>

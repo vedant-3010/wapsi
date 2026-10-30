@@ -5,6 +5,7 @@ import { CallEmpty } from '@/components/call/CallEmpty'
 import { FeedItem } from '@/components/call/FeedItem'
 import { Transcript } from '@/components/call/Transcript'
 import { StatusDot, type Tone } from '@/components/kit/StatusDot'
+import { TAG } from '@/lib/tones'
 import { Waveform } from '@/components/kit/Waveform'
 import { Panel } from '@/components/Panel'
 import { useElapsed } from '@/hooks/useElapsed'
@@ -16,28 +17,28 @@ import { cn } from '@/lib/utils'
 // Bolna call states. Every state has a word; colour only adds to it.
 const STATUS: Record<string, { label: string; tone: Tone }> = {
   queued: { label: 'Queued', tone: 'idle' },
-  initiated: { label: 'Dialling', tone: 'warn' },
-  ringing: { label: 'Ringing', tone: 'warn' },
-  'in-progress': { label: 'On the call', tone: 'ok' },
-  'call-disconnected': { label: 'Wrapping up', tone: 'paytm' },
-  completed: { label: 'Completed', tone: 'paytm' },
-  'no-answer': { label: 'No answer', tone: 'danger' },
-  busy: { label: 'Busy', tone: 'danger' },
+  initiated: { label: 'Dialling', tone: 'amber' },
+  ringing: { label: 'Ringing', tone: 'amber' },
+  'in-progress': { label: 'On the call', tone: 'sage' },
+  'call-disconnected': { label: 'Wrapping up', tone: 'idle' },
+  completed: { label: 'Completed', tone: 'idle' },
+  'no-answer': { label: 'No answer', tone: 'coral' },
+  busy: { label: 'Busy', tone: 'coral' },
 }
 
-const OUTCOMES: Record<string, { label: string; tone: string }> = {
-  fix_scheduled: { label: 'Technician booked', tone: 'border-paytm/35 text-paytm' },
-  fixed_live: { label: 'Fixed during the call', tone: 'border-ok/40 text-ok' },
-  statement_sent: { label: 'Statement sent', tone: 'border-paytm/35 text-paytm' },
-  credit_applied: { label: 'Credit applied', tone: 'border-paytm/35 text-paytm' },
-  handed_off: { label: 'Handed to a person', tone: 'border-warn/40 text-warn' },
-  no_answer: { label: 'No answer', tone: 'border-danger/40 text-danger' },
+const OUTCOMES: Record<string, { label: string; tone: Tone }> = {
+  fix_scheduled: { label: 'Technician booked', tone: 'sage' },
+  fixed_live: { label: 'Fixed during the call', tone: 'sage' },
+  statement_sent: { label: 'Statement sent', tone: 'sage' },
+  credit_applied: { label: 'Credit applied', tone: 'sage' },
+  handed_off: { label: 'Handed to a person', tone: 'amber' },
+  no_answer: { label: 'No answer', tone: 'coral' },
 }
 
-/** +91 98765 43210 → +91 ••••• •3210 */
+/** +91 98765 43210 → "phone ending 3210" (the full number never goes on screen). */
 function maskPhone(phone: string) {
   const digits = phone.replace(/\D/g, '')
-  return digits.length < 4 ? phone : `+${digits.slice(0, 2)} ••••• •${digits.slice(-4)}`
+  return digits.length < 4 ? phone : `phone ending ${digits.slice(-4)}`
 }
 
 type LiveCallProps = { call: Call | null; feed: Action[]; active: boolean; className?: string }
@@ -60,7 +61,7 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
     )
   }
 
-  const status = STATUS[call.status] ?? { label: call.status.replace(/-/g, ' '), tone: 'danger' as const }
+  const status = STATUS[call.status] ?? { label: call.status.replace(/-/g, ' '), tone: 'coral' as const }
   const outcome = call.outcome ? OUTCOMES[call.outcome] : null
   const dryRun = call.bolna_execution_id?.startsWith('dry-')
   const speaking = active && call.status === 'in-progress'
@@ -73,9 +74,9 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
       scroll
       aside={
         <div className="flex items-center gap-2">
-          {dryRun && <span className="caption rounded-full border border-warn/40 px-2 py-0.5 text-warn">Dry run</span>}
-          <span className="inline-flex h-7 items-center gap-2 rounded-full border border-line bg-surface-1 px-3 text-[13px]">
-            {speaking ? <Waveform live className="text-ok" /> : <StatusDot tone={status.tone} live={active} />}
+          {dryRun && <span className={cn('tag', TAG.amber)}>Dry run</span>}
+          <span className={cn('tag', TAG[status.tone])}>
+            {speaking ? <Waveform live /> : <StatusDot tone={status.tone} live={active} />}
             {status.label}
           </span>
         </div>
@@ -85,25 +86,34 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
         key={call.id}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="sticky top-0 z-10 -mx-5 mb-4 border-b border-line bg-[#0a1023] px-5 pb-4"
+        className="sticky top-0 z-10 -mx-6 mb-5 border-b border-line bg-paper px-6 pb-5"
       >
-        <h3 className="font-serif text-[40px] leading-[1.05] tracking-tight">{call.merchants?.name ?? call.merchant_id}</h3>
-        <div className="caption mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-          {call.merchants && <span>{LANGUAGE_NAMES[call.merchants.language]}</span>}
-          {call.merchants?.area && <span>· {call.merchants.area}</span>}
-          <span>· {maskPhone(call.phone)}</span>
-          <span>· {formatTime(call.started_at)}</span>
-          <span className={cn('tabular-nums', active && 'text-fg-1')}>
-            · {active ? formatDuration(elapsed) : call.duration_s ? formatDuration(call.duration_s) : '—'}
+        <h3 className="font-serif text-[46px] leading-[1] tracking-tight">{call.merchants?.name ?? call.merchant_id}</h3>
+        <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px] text-ink-3">
+          <span>
+            {[
+              call.merchants && `${ownerFirstName}, ${LANGUAGE_NAMES[call.merchants.language]}`,
+              call.merchants?.area,
+              maskPhone(call.phone),
+              `started ${formatTime(call.started_at)}`,
+            ].filter(Boolean).join('  ·  ')}
+          </span>
+          <span
+            className={cn(
+              'rounded-full px-2 py-px font-mono text-[13px] tabular-nums',
+              active ? 'bg-sage-soft font-semibold text-sage' : 'bg-paper-3 text-ink-2',
+            )}
+          >
+            {active ? formatDuration(elapsed) : call.duration_s ? formatDuration(call.duration_s) : '—'}
           </span>
         </div>
         {outcome && (
           <motion.span
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className={cn('mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px]', outcome.tone)}
+            className={cn('tag mt-3', TAG[outcome.tone])}
           >
-            <span className="caption text-current opacity-70">Outcome</span> {outcome.label}
+            Outcome · {outcome.label}
           </motion.span>
         )}
       </motion.div>
@@ -117,17 +127,13 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
       </ol>
 
       {active && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="flex items-center gap-3 pl-12 text-sm text-fg-3"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-3 pl-[52px] text-[14px] text-ink-3">
           <span className="flex gap-1" aria-hidden>
             {[0, 1, 2].map((i) => (
-              <span key={i} className="size-1.5 rounded-full bg-paytm animate-dot" style={{ animationDelay: `${i * 160}ms` }} />
+              <span key={i} className="size-1.5 rounded-full bg-ink-3 animate-dot" style={{ animationDelay: `${i * 160}ms` }} />
             ))}
           </span>
-          {call.status === 'in-progress' ? 'Wapsi is talking with the merchant' : 'Connecting the call'}
+          {call.status === 'in-progress' ? `Wapsi is talking with ${ownerFirstName}` : 'Connecting the call'}
         </motion.div>
       )}
       <div ref={end} />
@@ -136,17 +142,15 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-4 space-y-3 rounded-[14px] border border-line bg-surface-1 p-4"
+          className="mt-2 space-y-3 rounded-[18px] bg-paper-2 p-5"
         >
           {call.summary && (
             <div>
               <div className="caption mb-1">Call summary</div>
-              <p className="font-serif text-xl leading-snug text-fg-1 italic">“{call.summary}”</p>
+              <p className="font-serif text-[23px] leading-snug text-ink-1 italic">“{call.summary}”</p>
             </div>
           )}
-          {call.recording_url && (
-            <audio controls preload="none" src={call.recording_url} className="h-9 w-full accent-paytm" />
-          )}
+          {call.recording_url && <audio controls preload="none" src={call.recording_url} className="h-9 w-full" />}
           {call.transcript && <Transcript transcript={call.transcript} ownerFirstName={ownerFirstName} />}
         </motion.div>
       )}

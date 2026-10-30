@@ -75,20 +75,20 @@ export function Sparkline({
         <path
           d={path(recentStart, historyEnd)}
           fill="none"
-          className="stroke-danger"
+          className="stroke-coral-mid"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
           {...stroke}
         />
         {today && (
-          <path d={path(lastIndex - 1, values.length)} fill="none" className="stroke-ok" strokeWidth="2" strokeDasharray="3 3" {...stroke} />
+          <path d={path(lastIndex - 1, values.length)} fill="none" className="stroke-sage" strokeWidth="2" strokeDasharray="3 3" {...stroke} />
         )}
       </svg>
       {/* An HTML dot stays round when the line stretches. */}
       {today && (
         <span
-          className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-ok animate-status-pop"
+          className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-paper bg-sage animate-status-pop"
           style={{ left: `${(lastX / width) * 100}%`, top: `${(lastY / height) * 100}%` }}
         />
       )}

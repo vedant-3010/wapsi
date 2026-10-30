@@ -29,11 +29,11 @@ export function Transcript({ transcript, ownerFirstName }: { transcript: string;
     <div>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-control px-1 py-1.5 text-left transition-colors hover:text-fg-1"
+        className="flex w-full items-center justify-between rounded-control py-1 text-left text-[14px] font-medium text-ink-2 transition-colors hover:text-ink-1"
         aria-expanded={open}
       >
-        <span className="caption text-fg-2">Transcript · {turns.length} turns</span>
-        <ChevronDown className={cn('size-4 text-fg-3 transition-transform duration-200', open && 'rotate-180')} />
+        Transcript · {turns.length} turns
+        <ChevronDown className={cn('size-4 transition-transform duration-200', open && 'rotate-180')} />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -42,17 +42,15 @@ export function Transcript({ transcript, ownerFirstName }: { transcript: string;
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={SPRING_PANEL}
-            className="flex flex-col gap-2 overflow-hidden pt-2"
+            className="flex flex-col gap-2.5 overflow-hidden pt-3"
           >
             {turns.map((turn, i) => (
               <li key={i} className={cn('flex flex-col', turn.speaker === 'merchant' ? 'items-end' : 'items-start')}>
-                <span className="caption mb-0.5">{turn.speaker === 'agent' ? 'Wapsi' : ownerFirstName}</span>
+                <span className="caption mb-1 text-[12px]">{turn.speaker === 'agent' ? 'Wapsi' : ownerFirstName}</span>
                 <span
                   className={cn(
-                    'max-w-[85%] rounded-[14px] px-3 py-2 text-[15px] leading-snug',
-                    turn.speaker === 'agent'
-                      ? 'rounded-tl-[4px] border border-paytm/20 bg-paytm/[0.08] text-fg-1'
-                      : 'rounded-tr-[4px] bg-surface-3 text-fg-1',
+                    'max-w-[85%] rounded-[16px] px-3.5 py-2 text-[15px] leading-snug text-ink-1',
+                    turn.speaker === 'agent' ? 'rounded-tl-[5px] bg-paper-3' : 'rounded-tr-[5px] bg-sky-soft',
                   )}
                 >
                   {turn.text}

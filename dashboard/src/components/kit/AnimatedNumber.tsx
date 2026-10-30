@@ -38,7 +38,7 @@ export function AnimatedNumber({ value, format = (n) => String(Math.round(n)), c
       {gain && (
         <span
           key={gain.at}
-          className="absolute -top-1 left-full ml-1.5 font-mono text-sm font-medium text-ok animate-float-up"
+          className="absolute -top-1 left-full ml-2 font-sans text-base font-semibold text-sage animate-float-up"
           onAnimationEnd={() => setGain(null)}
         >
           +{format(gain.amount)}

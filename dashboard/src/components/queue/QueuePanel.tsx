@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { Panel } from '@/components/Panel'
 import { CallDialog } from '@/components/queue/CallDialog'
+import { MerchantSheet } from '@/components/queue/MerchantSheet'
 import { QueueRow } from '@/components/queue/QueueRow'
 import { SPRING_PANEL } from '@/lib/motion'
 import type { RiskRow } from '@/lib/types'
@@ -25,7 +26,7 @@ type QueuePanelProps = {
 
 function Segmented({ value, counts, onChange }: { value: Filter; counts: Record<Filter, number>; onChange: (f: Filter) => void }) {
   return (
-    <div className="flex rounded-control border border-line bg-surface-1 p-0.5" role="tablist">
+    <div className="flex rounded-full bg-paper-3 p-1" role="tablist">
       {FILTERS.map((f) => (
         <button
           key={f.key}
@@ -33,15 +34,15 @@ function Segmented({ value, counts, onChange }: { value: Filter; counts: Record<
           aria-selected={value === f.key}
           onClick={() => onChange(f.key)}
           className={cn(
-            'relative rounded-[8px] px-2.5 py-1 text-[13px] transition-colors duration-150 active:scale-[0.97]',
-            value === f.key ? 'text-fg-1' : 'text-fg-3 hover:text-fg-2',
+            'relative rounded-full px-3 py-1 text-[13px] font-medium transition-colors duration-150 active:scale-[0.97]',
+            value === f.key ? 'text-ink-1' : 'text-ink-3 hover:text-ink-2',
           )}
         >
           {value === f.key && (
-            <motion.span layoutId="queue-filter" transition={SPRING_PANEL} className="absolute inset-0 rounded-[8px] bg-surface-3" />
+            <motion.span layoutId="queue-filter" transition={SPRING_PANEL} className="absolute inset-0 rounded-full bg-paper shadow-card" />
           )}
           <span className="relative">
-            {f.label} <span className="font-mono text-[11px] text-fg-3">{counts[f.key]}</span>
+            {f.label} <span className="text-ink-3 tabular-nums">{counts[f.key]}</span>
           </span>
         </button>
       ))}
@@ -49,10 +50,11 @@ function Segmented({ value, counts, onChange }: { value: Filter; counts: Record<
   )
 }
 
-// F1. Sorted by risk score, then days silent. Call on a row is the backup to Start Wapsi's run.
+// F1. Sorted by risk score, then days silent. A row opens the merchant; Call is the backup to the run.
 export function QueuePanel({ queue, series, onCallMerchantId, className, onCall }: QueuePanelProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [target, setTarget] = useState<RiskRow | null>(null)
+  const [open, setOpen] = useState<RiskRow | null>(null)
   const counts = {
     all: queue.length,
     wapsi: queue.filter((r) => r.cohort === 'wapsi').length,
@@ -65,13 +67,13 @@ export function QueuePanel({ queue, series, onCallMerchantId, className, onCall 
       title="At-risk queue"
       aside={<Segmented value={filter} counts={counts} onChange={setFilter} />}
       className={className}
-      bodyClassName="px-2"
+      bodyClassName="px-3"
       scroll
     >
       {rows.length === 0 ? (
-        <div className="px-3 py-10 text-center">
-          <p className="font-serif text-2xl text-fg-1">Nothing at risk.</p>
-          <p className="mt-1 text-sm text-fg-3">Every Soundbox in this view is speaking. Reset the demo to reseed.</p>
+        <div className="px-3 py-12 text-center">
+          <p className="font-serif text-3xl text-ink-1">Nothing at risk.</p>
+          <p className="mt-1 text-[15px] text-ink-3">Every Soundbox in this view is speaking. Reset the demo to reseed.</p>
         </div>
       ) : (
         <ul>
@@ -83,12 +85,21 @@ export function QueuePanel({ queue, series, onCallMerchantId, className, onCall 
                 index={i}
                 series={series[row.device_id]}
                 onCall={row.merchant_id === onCallMerchantId}
+                onOpen={() => setOpen(row)}
                 onCallClick={() => setTarget(row)}
               />
             ))}
           </AnimatePresence>
         </ul>
       )}
+      <MerchantSheet
+        row={open}
+        onClose={() => setOpen(null)}
+        onCall={(row) => {
+          setOpen(null)
+          setTarget(row)
+        }}
+      />
       <CallDialog target={target} onClose={() => setTarget(null)} onCall={onCall} />
     </Panel>
   )

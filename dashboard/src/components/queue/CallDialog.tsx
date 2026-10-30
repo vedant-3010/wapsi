@@ -30,18 +30,18 @@ export function CallDialog({ target, onClose, onCall }: CallDialogProps) {
 
   return (
     <Dialog open={target !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="glass-menu rounded-dialog border border-line-strong p-6 shadow-pop sm:max-w-md">
+      <DialogContent className="rounded-dialog border border-line bg-paper p-7 shadow-pop sm:max-w-md">
         <DialogHeader>
-          <div className="caption">Call now · backup to the run</div>
-          <DialogTitle className="font-serif text-3xl font-normal tracking-tight">{target?.name}</DialogTitle>
-          <DialogDescription className="text-fg-2">{target?.reason}</DialogDescription>
+          <div className="caption">Call now, as a backup to the run</div>
+          <DialogTitle className="font-serif text-[36px] leading-tight font-normal tracking-tight">{target?.name}</DialogTitle>
+          <DialogDescription className="text-[15px] text-ink-2">{target?.reason}</DialogDescription>
         </DialogHeader>
         <label className="mt-2 grid gap-2">
-          <span className="caption">Phone · must be on the allowlist</span>
+          <span className="caption">Phone (must be on the allowlist)</span>
           <Input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            className="h-11 rounded-control border-line-strong bg-surface-1 font-mono text-base"
+            className="h-12 rounded-control border-line-strong bg-paper-2 font-mono text-base focus-visible:bg-paper"
             inputMode="tel"
             autoFocus
             onKeyDown={(e) => e.key === 'Enter' && void submit()}
@@ -53,7 +53,7 @@ export function CallDialog({ target, onClose, onCall }: CallDialogProps) {
           </Button>
           <Button
             key={failedAt}
-            variant="brand"
+            variant="primary"
             onClick={() => void submit()}
             disabled={sending || !phone.trim()}
             className={cn(failedAt > 0 && 'animate-shake')}
