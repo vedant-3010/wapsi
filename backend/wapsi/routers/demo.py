@@ -1,13 +1,20 @@
-"""POST /api/demo/reset (F8). Stub until PLAN 0.4."""
+"""POST /api/demo/reset (F8): reseed everything relative to today (SPEC §5)."""
 
-from fastapi import APIRouter
+import logging
 
+from fastapi import APIRouter, Depends
+from supabase import Client
+
+from wapsi.db import get_db
 from wapsi.models import OkResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
 @router.post("/api/demo/reset")
-def reset_demo() -> OkResponse:
-    # TODO(0.4): supabase.rpc("seed_demo").
+def reset_demo(db: Client = Depends(get_db)) -> OkResponse:
+    db.rpc("seed_demo").execute()
+    logger.info("Demo reset: seed_demo() done")
     return OkResponse()

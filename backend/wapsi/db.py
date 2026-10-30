@@ -13,6 +13,10 @@ logger = logging.getLogger(__name__)
 DbStatus = Literal["ok", "error", "not_configured"]
 
 
+class DbNotConfigured(RuntimeError):
+    """SUPABASE_URL / SUPABASE_SECRET_KEY missing. main.py maps it to 503; tool routes turn it into a safe 200."""
+
+
 def is_configured() -> bool:
     settings = get_settings()
     return bool(settings.supabase_url and settings.supabase_secret_key)
@@ -21,9 +25,14 @@ def is_configured() -> bool:
 @lru_cache
 def get_client() -> Client:
     if not is_configured():
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set")
+        raise DbNotConfigured("SUPABASE_URL and SUPABASE_SECRET_KEY must be set")
     settings = get_settings()
     return create_client(settings.supabase_url, settings.supabase_secret_key)
+
+
+def get_db() -> Client:
+    """FastAPI dependency for routes that use the database; tests override it with a fake."""
+    return get_client()
 
 
 def ping() -> DbStatus:
