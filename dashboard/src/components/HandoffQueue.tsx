@@ -54,7 +54,7 @@ export function HandoffQueue({ handoffs, takingId, onTake }: HandoffQueueProps) 
                     <span className="font-mono text-[12px] text-ink-3">{formatTime(h.created_at)}</span>
                   </div>
                   <div className="mt-3 text-[16px] font-semibold">{h.merchants?.name ?? h.merchant_id}</div>
-                  <p className="mt-1 font-serif text-[22px] leading-snug text-ink-1 italic">“{h.summary}”</p>
+                  <p className="mt-1 text-[18px] leading-snug font-medium text-ink-1">“{h.summary}”</p>
                   {h.next_step && (
                     <p className="mt-2 flex items-start gap-1.5 text-[14px] text-ink-2">
                       <ArrowRight className="mt-0.5 size-4 shrink-0 text-amber" />

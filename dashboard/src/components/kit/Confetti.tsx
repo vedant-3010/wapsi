@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 
 // Soft pastels from the palette, plus one hint of Paytm blue.
-const COLORS = ['#8cc7a4', '#e8b85c', '#ea8a76', '#9fb9e8', '#00baf2', '#c9b8f0']
+const COLORS = ['#172b75', '#00bcf1', '#4cc38a', '#f2b23e', '#7fd9f7', '#c9d5f5']
 
 // Fixed, hand-spread pieces (no randomness: the burst looks the same every time).
 const PIECES = Array.from({ length: 22 }, (_, i) => {

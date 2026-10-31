@@ -18,7 +18,7 @@ export function CallEmpty() {
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={SPRING_PANEL}
-        className="font-serif text-[56px] leading-[1] tracking-tight text-ink-1"
+        className="font-display text-[44px] leading-[1.05] font-bold tracking-tight text-ink-1"
       >
         Ready when <span className="italic">you</span> are.
       </motion.h3>
@@ -40,7 +40,7 @@ export function CallEmpty() {
               <span className={`grid size-8 place-items-center rounded-full ${tone}`}>
                 <Icon className="size-4" />
               </span>
-              <span className="font-serif text-xl text-ink-4">{i + 1}</span>
+              <span className="font-display text-lg font-bold text-ink-4">{i + 1}</span>
             </div>
             <div className="mt-3 text-[15px] font-semibold">{title}</div>
             <div className="mt-0.5 text-[13px] leading-snug text-ink-3">{text}</div>

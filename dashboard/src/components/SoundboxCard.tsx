@@ -266,10 +266,10 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
 
       <div className="mt-1 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="line-clamp-2 font-serif text-[30px] leading-[1.05]">{name}</div>
+          <div className="line-clamp-2 font-display text-[22px] leading-[1.15] font-bold tracking-tight">{name}</div>
           <div className="mt-1 text-[13px] text-ink-3">Last spoke {formatDayTime(device.last_announced_at)}</div>
         </div>
-        <div className="mt-1">{statusTag}</div>
+        <div className="mt-1 shrink-0 whitespace-nowrap">{statusTag}</div>
       </div>
 
       {chart && <div className="mt-5 border-t border-line pt-4">{chart}</div>}
@@ -288,7 +288,7 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
             <div className="flex flex-col gap-5 border-t border-line p-7 md:border-t-0 md:border-l">
               <div>
                 <div className="caption">Virtual Soundbox · {device.id}</div>
-                <DialogTitle className="mt-1 font-serif text-[40px] leading-[1.02] font-normal tracking-tight">{name}</DialogTitle>
+                <DialogTitle className="mt-1 font-display text-[32px] leading-[1.1] font-bold tracking-tight">{name}</DialogTitle>
                 <DialogDescription className="mt-1 text-[14px] text-ink-3">
                   Last spoke {formatDayTime(device.last_announced_at)}
                 </DialogDescription>

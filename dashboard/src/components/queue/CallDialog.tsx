@@ -33,7 +33,7 @@ export function CallDialog({ target, onClose, onCall }: CallDialogProps) {
       <DialogContent className="rounded-dialog border border-line bg-paper p-7 shadow-pop sm:max-w-md">
         <DialogHeader>
           <div className="caption">Call now, as a backup to the run</div>
-          <DialogTitle className="font-serif text-[36px] leading-tight font-normal tracking-tight">{target?.name}</DialogTitle>
+          <DialogTitle className="font-display text-[30px] leading-tight font-bold tracking-tight">{target?.name}</DialogTitle>
           <DialogDescription className="text-[15px] text-ink-2">{target?.reason}</DialogDescription>
         </DialogHeader>
         <label className="mt-2 grid gap-2">

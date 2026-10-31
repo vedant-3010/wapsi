@@ -48,7 +48,7 @@ const KIND: Record<string, { icon: LucideIcon; look: Look }> = {
 
 // Wapsi's own decisions are solid ink; everything else is a soft tag.
 const NODE: Record<Look, string> = {
-  agent: 'bg-ink-1 text-white',
+  agent: 'bg-navy text-white',
   system: 'bg-paper-3 text-ink-2',
   good: 'bg-sage-soft text-sage ring-1 ring-sage-mid/50',
   person: 'bg-amber-soft text-amber ring-1 ring-amber-mid/50',

@@ -88,7 +88,7 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
         animate={{ opacity: 1, y: 0 }}
         className="sticky top-0 z-10 -mx-6 mb-5 border-b border-line bg-paper px-6 pb-5"
       >
-        <h3 className="font-serif text-[46px] leading-[1] tracking-tight">{call.merchants?.name ?? call.merchant_id}</h3>
+        <h3 className="font-display text-[36px] leading-[1.05] font-bold tracking-tight">{call.merchants?.name ?? call.merchant_id}</h3>
         <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[14px] text-ink-3">
           <span>
             {[
@@ -147,7 +147,7 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
           {call.summary && (
             <div>
               <div className="caption mb-1">Call summary</div>
-              <p className="font-serif text-[23px] leading-snug text-ink-1 italic">“{call.summary}”</p>
+              <p className="text-[19px] leading-snug font-medium text-ink-1">“{call.summary}”</p>
             </div>
           )}
           {call.recording_url && <audio controls preload="none" src={call.recording_url} className="h-9 w-full" />}

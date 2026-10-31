@@ -72,7 +72,7 @@ export function QueuePanel({ queue, series, onCallMerchantId, className, onCall 
     >
       {rows.length === 0 ? (
         <div className="px-3 py-12 text-center">
-          <p className="font-serif text-3xl text-ink-1">Nothing at risk.</p>
+          <p className="font-display text-2xl font-bold text-ink-1">Nothing at risk.</p>
           <p className="mt-1 text-[15px] text-ink-3">Every Soundbox in this view is speaking. Reset the demo to reseed.</p>
         </div>
       ) : (

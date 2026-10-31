@@ -24,7 +24,7 @@ export function KpiStrip({ kpis }: { kpis: Kpis }) {
             value={tile.value}
             format={tile.format}
             className={cn(
-              'mt-1 font-serif text-[54px] leading-[0.95] tracking-tight transition-colors duration-500',
+              'mt-1 font-display text-[44px] leading-none font-bold tracking-tight transition-colors duration-500',
               tile.outcome && tile.value > 0 ? 'text-sage' : 'text-ink-1',
             )}
           />

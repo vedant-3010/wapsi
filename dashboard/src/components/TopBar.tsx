@@ -25,13 +25,13 @@ function Spinner() {
 function Wordmark() {
   return (
     <div className="flex items-center gap-3">
-      <span className="relative grid size-10 place-items-center rounded-[13px] bg-ink-1 text-white">
+      <span className="relative grid size-10 place-items-center rounded-[13px] bg-navy text-white">
         <Undo2 className="size-5" strokeWidth={2.4} />
-        {/* the one fixed hint of Paytm blue */}
+        {/* Paytm cyan */}
         <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-canvas bg-paytm" />
       </span>
       <div>
-        <div className="font-serif text-[32px] leading-none tracking-tight">Wapsi</div>
+        <div className="font-display text-[28px] leading-none font-bold tracking-tight text-navy">Wapsi</div>
         <div className="caption mt-0.5">Merchant recovery</div>
       </div>
     </div>

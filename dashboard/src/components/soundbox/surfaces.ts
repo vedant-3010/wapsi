@@ -25,7 +25,7 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
 /** "Paytm" as type: "Pay" in navy, "tm" in sky, heavy and slightly slanted like the mark. */
 function wordmark(ctx: CanvasRenderingContext2D, cx: number, y: number, size: number) {
   ctx.save()
-  ctx.font = `900 ${size}px "Geist Variable", system-ui, sans-serif`
+  ctx.font = `900 ${size}px "Roboto Variable", system-ui, sans-serif`
   ctx.textBaseline = 'alphabetic'
   ctx.textAlign = 'left'
   const pay = ctx.measureText('Pay').width
@@ -102,7 +102,7 @@ function upiFooter(ctx: CanvasRenderingContext2D, cy: number) {
     ctx.fill()
   }
   ctx.save()
-  ctx.font = 'italic 900 60px "Geist Variable", system-ui, sans-serif'
+  ctx.font = 'italic 900 60px "Roboto Variable", system-ui, sans-serif'
   ctx.fillStyle = '#6d6e71'
   ctx.textAlign = 'left'
   ctx.fillText('BHIM', 300, cy)
@@ -110,7 +110,7 @@ function upiFooter(ctx: CanvasRenderingContext2D, cy: number) {
   ctx.fillRect(522, cy - 52, 4, 62)
   ctx.fillText('UPI', 548, cy)
   chevron(660, cy - 8)
-  ctx.font = '500 13px "Geist Variable", system-ui, sans-serif'
+  ctx.font = '500 13px "Roboto Variable", system-ui, sans-serif'
   ctx.fillText('BHARAT INTERFACE FOR MONEY', 300, cy + 26)
   ctx.fillText('UNIFIED PAYMENTS INTERFACE', 548, cy + 26)
   ctx.restore()
@@ -130,16 +130,16 @@ export function faceplateTexture(upiId: string): CanvasTexture {
   wordmark(ctx, 512, 205, 116)
   ctx.textAlign = 'center'
   ctx.fillStyle = INK
-  ctx.font = '600 50px "Geist Variable", system-ui, sans-serif'
+  ctx.font = '600 50px "Roboto Variable", system-ui, sans-serif'
   ctx.fillText('Accepted Here', 512, 268)
-  ctx.font = '600 36px "Geist Variable", system-ui, sans-serif'
+  ctx.font = '600 36px "Roboto Variable", system-ui, sans-serif'
   ctx.fillText('Scan & Pay using any UPI App', 512, 350)
 
   decorativeQr(ctx, 332, 382, 360)
   grille(ctx, 120, false)
   grille(ctx, 904, true)
 
-  ctx.font = '600 32px "Geist Variable", system-ui, sans-serif'
+  ctx.font = '600 32px "Roboto Variable", system-ui, sans-serif'
   ctx.fillStyle = INK
   ctx.fillText(`UPI ID: ${upiId}`, 512, 800)
   upiFooter(ctx, 902)

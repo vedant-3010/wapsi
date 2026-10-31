@@ -4,19 +4,19 @@ import type { ComponentProps } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * `pop` is the one main action on screen (Start Wapsi's run): ink with a hard edge that it presses
- * into. `primary` is plain ink for confirmations. `secondary` is a white card button. Every press dips.
+ * `pop` is the one main action on screen (Start Wapsi's run): Paytm navy with a cyan edge that it
+ * presses into. `primary` is plain navy for confirmations. `secondary` is a white card button. Every press dips.
  */
 const buttonVariants = cva(
   'relative inline-flex shrink-0 select-none items-center justify-center gap-2 whitespace-nowrap rounded-control ' +
     'font-medium outline-none transition-[color,background-color,border-color,box-shadow,scale,transform] ' +
-    'duration-150 ease-out focus-visible:ring-2 focus-visible:ring-ink-1/25 focus-visible:ring-offset-2 ' +
+    'duration-150 ease-out focus-visible:ring-2 focus-visible:ring-navy/30 focus-visible:ring-offset-2 ' +
     'focus-visible:ring-offset-canvas disabled:pointer-events-none disabled:opacity-45 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
         pop: 'pop',
-        primary: 'bg-ink-1 text-white hover:bg-black active:scale-[0.97]',
+        primary: 'bg-navy text-white hover:bg-ink-1 active:scale-[0.97]',
         secondary:
           'border border-line bg-paper text-ink-1 shadow-card hover:-translate-y-px hover:border-line-strong ' +
           'hover:shadow-lift active:translate-y-0 active:scale-[0.97]',

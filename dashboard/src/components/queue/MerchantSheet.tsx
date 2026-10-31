@@ -121,7 +121,7 @@ function Body({ row, onCall }: { row: RiskRow; onCall: (row: RiskRow) => void })
       <div className="flex items-start gap-4">
         <ScoreRing score={row.risk_score} size={52} />
         <div className="min-w-0">
-          <SheetTitle className="font-serif text-[38px] leading-[1.05] font-normal tracking-tight text-ink-1">{row.name}</SheetTitle>
+          <SheetTitle className="font-display text-[30px] leading-[1.1] font-bold tracking-tight text-ink-1">{row.name}</SheetTitle>
           <SheetDescription className="mt-1 text-[15px] text-ink-3">
             {row.owner_name} · {row.area} · {LANGUAGE_NAMES[row.language]}
           </SheetDescription>
