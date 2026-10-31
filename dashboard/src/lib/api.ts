@@ -47,4 +47,7 @@ export const api = {
   simulateNextDay: () => post<SimulateResponse>('/api/simulate/next-day'),
   resetDemo: () => post<{ ok: boolean }>('/api/demo/reset'),
   takeHandoff: (id: string) => post<TakeHandoffResponse>(`/api/handoffs/${id}/take`),
+  // The Soundbox's voice (Sarvam Bulbul WAV); fetched by useAnnouncer, cached by the browser.
+  announcementUrl: (amount: number, language: string) =>
+    `${API_URL}/api/soundbox/announce?${new URLSearchParams({ amount: String(amount), lang: language })}`,
 }

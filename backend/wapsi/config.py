@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # Technician windows the mocked field-service system offers for tomorrow (IST).
     technician_slots: Annotated[list[str], NoDecode] = ["11 AM to 1 PM", "3 PM to 5 PM"]
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    # Sarvam Bulbul voices the virtual Soundbox (F9); without a key the dashboard uses the browser's voice.
+    sarvam_api_key: str = ""
+    sarvam_tts_model: str = "bulbul:v3"
+    sarvam_speaker: str = "priya"
 
     @field_validator("allowed_numbers", "cors_origins", "technician_slots", mode="before")
     @classmethod

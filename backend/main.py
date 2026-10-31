@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from wapsi.config import get_settings
 from wapsi.db import DbNotConfigured
-from wapsi.routers import calls, demo, handoffs, health, runs, simulate, tools, webhooks
+from wapsi.routers import calls, demo, handoffs, health, runs, simulate, soundbox, tools, webhooks
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -20,7 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for module in (health, calls, runs, tools, webhooks, simulate, demo, handoffs):
+for module in (health, calls, runs, tools, webhooks, simulate, demo, handoffs, soundbox):
     app.include_router(module.router)
 
 

@@ -15,3 +15,6 @@ dist/
 # Tools and OS
 .vercel/
 .DS_Store
+
+# Generated audio
+*.wav

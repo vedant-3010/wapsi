@@ -3,4 +3,5 @@ uvicorn==0.54.0
 supabase==2.33.0
 httpx==0.28.1
 pydantic-settings==2.16.2
+sarvamai==0.1.41
 pytest==9.2.0
