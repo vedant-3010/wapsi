@@ -15,7 +15,7 @@ from wapsi.context import get_device, get_merchant
 from wapsi.db import first
 from wapsi.messages import LANGUAGE_NAMES
 from wapsi.models import StartCallResponse
-from wapsi.util import IST, days_since, format_day, format_inr, utc_now
+from wapsi.util import IST, days_since, format_day, format_inr, normalize_phone, utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def start_call(
 ) -> StartCallResponse:
     """Checks, calls row, feed actions, then Bolna (or a dry run). `picked` is the risk_queue row
     when Wapsi chose the merchant itself (F16); it adds the "Wapsi picked …" action."""
-    phone = (phone or settings.demo_default_phone).replace(" ", "")
+    phone = normalize_phone(phone or settings.demo_default_phone)
     if not phone:
         raise HTTPException(status_code=400, detail="No phone given and DEMO_DEFAULT_PHONE is not set")
     if phone not in settings.allowed_numbers:

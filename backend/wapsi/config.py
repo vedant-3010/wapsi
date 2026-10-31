@@ -7,6 +7,8 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from wapsi.util import normalize_phone
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -39,6 +41,16 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("allowed_numbers", mode="after")
+    @classmethod
+    def _normalize_numbers(cls, value: list[str]) -> list[str]:
+        return [normalize_phone(number) for number in value]
+
+    @field_validator("demo_default_phone", mode="after")
+    @classmethod
+    def _normalize_demo_phone(cls, value: str) -> str:
+        return normalize_phone(value)
 
     @field_validator("bolna_agent_ids", mode="before")
     @classmethod

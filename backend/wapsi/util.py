@@ -1,9 +1,20 @@
-"""Time and money helpers shared by the routers."""
+"""Time, money and phone helpers shared by the routers."""
 
 import math
+import re
 from datetime import UTC, date, datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
+
+
+def normalize_phone(phone: str) -> str:
+    """E.164 for comparing numbers: "+91 95523-30883", "09552330883" and "9552330883" → "+919552330883"."""
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    if len(digits) == 10:  # an Indian mobile without the country code
+        digits = "91" + digits
+    return f"+{digits}" if digits else ""
 
 
 def utc_now() -> datetime:
