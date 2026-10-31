@@ -1,7 +1,8 @@
 """Which merchant a tool call is about (SPEC §7 context rule).
 
-Use the merchant_id the LLM sent if it exists; otherwise fall back to the merchant on the active
-call. Never fail because the LLM sent a bad ID.
+Use the merchant_id the LLM sent if it exists. Mid-call, the merchant on the line wins: a bad ID, or a
+real ID of a merchant nobody is talking to, falls back to the active call's merchant. Never fail
+because the LLM sent a bad ID, and never act for a merchant who isn't on the call.
 """
 
 import logging
@@ -29,6 +30,8 @@ class CallContext:
     merchant: dict[str, Any]
     device: dict[str, Any]
     call: dict[str, Any] | None
+    # A real merchant_id the LLM sent for someone not on any live call; we acted for the caller instead.
+    overruled: str | None = None
 
     @property
     def merchant_id(self) -> str:
@@ -43,8 +46,8 @@ class CallContext:
         return self.call["id"] if self.call else None
 
 
-def active_call(db: Client) -> dict[str, Any] | None:
-    """The latest call that hasn't reached a final status, started in the last 15 minutes."""
+def active_calls(db: Client) -> list[dict[str, Any]]:
+    """Calls that haven't reached a final status, started in the last 15 minutes, newest first."""
     now = utc_now()
     recent = (
         db.table("calls")
@@ -56,11 +59,13 @@ def active_call(db: Client) -> dict[str, Any] | None:
         .execute()
         .data
     )
-    for call in recent:
-        if call["status"] == "queued" and parse_ts(call["started_at"]) < now - QUEUED_GRACE:
-            continue
-        return call
-    return None
+    return [c for c in recent if not (c["status"] == "queued" and parse_ts(c["started_at"]) < now - QUEUED_GRACE)]
+
+
+def active_call(db: Client) -> dict[str, Any] | None:
+    """The latest active call."""
+    calls = active_calls(db)
+    return calls[0] if calls else None
 
 
 def get_merchant(db: Client, merchant_id: str) -> dict[str, Any] | None:
@@ -72,11 +77,19 @@ def get_device(db: Client, merchant_id: str) -> dict[str, Any] | None:
 
 
 def resolve(db: Client, merchant_id: str | None) -> CallContext | None:
-    call = active_call(db)
+    calls = active_calls(db)
     wanted = (merchant_id or "").strip().upper()
     merchant = get_merchant(db, wanted) if wanted else None
-    if merchant is None and call is not None:
-        if wanted:
+    call = next((c for c in calls if merchant is not None and c["merchant_id"] == merchant["id"]), None)
+    overruled = None
+    if call is None and calls:
+        # Mid-call, the person on the line wins: a bad ID falls back to them, and so does a real ID of a
+        # merchant nobody is talking to (the LLM must not book a visit for a shop that isn't on the phone).
+        call = calls[0]
+        if merchant is not None:
+            logger.warning("merchant_id %s is not on a live call; acting for %s instead", wanted, call["merchant_id"])
+            overruled = merchant["id"]
+        elif wanted:
             logger.warning("Unknown merchant_id %r; using the active call's merchant %s", wanted, call["merchant_id"])
         merchant = get_merchant(db, call["merchant_id"])
     if merchant is None:
@@ -84,6 +97,4 @@ def resolve(db: Client, merchant_id: str | None) -> CallContext | None:
     device = get_device(db, merchant["id"])
     if device is None:
         return None
-    if call is not None and call["merchant_id"] != merchant["id"]:
-        call = None  # the active call is about someone else
-    return CallContext(merchant=merchant, device=device, call=call)
+    return CallContext(merchant=merchant, device=device, call=call, overruled=overruled)

@@ -59,7 +59,7 @@ def test_live_call_sends_user_data_to_bolna(
             "call_id": body["call_id"], "merchant_id": "M001", "device_id": "SB-M001",
             "merchant_name": "Sharma General Store", "owner_name": "Ramesh Sharma", "owner_first_name": "Ramesh",
             "language_name": "Hindi",
-            "greeting": "नमस्ते Ramesh जी! मैं Wapsi, Paytm merchant support से बोल रहा हूँ। "
+            "greeting": "नमस्ते Ramesh जी! मैं Wapsi, Paytm merchant support का AI assistant बोल रहा हूँ। "
                         "आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
             "reason": "Silent 4 days · QR −80%", "days_silent": "4",
             "last_settlement_amount": "₹18,450", "last_settlement_date": day,

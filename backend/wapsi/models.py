@@ -86,7 +86,8 @@ class GoodwillCreditRequest(ToolRequest):
 class ToolResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    result: str
+    result: str  # what the agent says to the merchant
+    next: str | None = None  # what the agent does next; an instruction for the LLM, never read aloud
 
 
 # Webhook

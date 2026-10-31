@@ -12,6 +12,7 @@ import {
   PhoneOff,
   PhoneOutgoing,
   RotateCw,
+  ShieldCheck,
   Stethoscope,
   UsersRound,
   Wrench,
@@ -37,6 +38,8 @@ const KIND: Record<string, { icon: LucideIcon; look: Look }> = {
   credit_applied: { icon: BadgeIndianRupee, look: 'agent' },
   credit_refused: { icon: Ban, look: 'person' },
   escalated: { icon: UsersRound, look: 'person' },
+  // the backend's rules held back something the AI asked for (backend wapsi/guardrails.py)
+  guardrail: { icon: ShieldCheck, look: 'system' },
   call_ended: { icon: PhoneOff, look: 'system' },
   technician_visited: { icon: HardHat, look: 'system' },
   payments_resumed: { icon: BadgeCheck, look: 'good' },

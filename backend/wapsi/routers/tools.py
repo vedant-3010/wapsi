@@ -12,8 +12,8 @@ from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
 from supabase import Client
 
-from wapsi import messages
-from wapsi.actions import log_action, set_outcome
+from wapsi import guardrails, messages
+from wapsi.actions import Actor, log_action, set_outcome
 from wapsi.auth import require_tool_secret
 from wapsi.config import Settings, get_settings
 from wapsi.context import CallContext, resolve
@@ -27,7 +27,12 @@ logger = logging.getLogger(__name__)
 
 class SafeToolRoute(APIRoute):
     """Safety net for SPEC §7: a malformed body (422) or an uncaught error (500) becomes HTTP 200.
-    Also logs exactly what Bolna sent (minus the Authorization header)."""
+    Also logs exactly what Bolna sent (minus the Authorization header), and leaves empty fields out of
+    replies so the LLM sees only what is set."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs["response_model_exclude_none"] = True
+        super().__init__(*args, **kwargs)
 
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
         handler = super().get_route_handler()
@@ -54,12 +59,37 @@ def _context(db: Client, merchant_id: str | None) -> CallContext:
     ctx = resolve(db, merchant_id)
     if ctx is None:
         raise LookupError(f"No merchant for merchant_id={merchant_id!r} and no active call")
+    if ctx.overruled:
+        _guardrail(db, ctx, messages.other_merchant(ctx.merchant["name"]), {"named": ctx.overruled})
     return ctx
 
 
-def _log(db: Client, ctx: CallContext, type: str, detail: str, payload: dict[str, Any] | None = None) -> None:
+def _log(db: Client, ctx: CallContext, type: str, detail: str, payload: dict[str, Any] | None = None,
+         actor: Actor = "agent") -> None:
     log_action(db, merchant_id=ctx.merchant_id, device_id=ctx.device_id, call_id=ctx.call_id,
-               type=type, detail=detail, payload=payload)
+               type=type, detail=detail, payload=payload, actor=actor)
+
+
+def _guardrail(db: Client, ctx: CallContext, detail: str, payload: dict[str, Any] | None = None) -> None:
+    """A check held back what the LLM asked for (wapsi/guardrails.py); the feed shows it, actor system."""
+    _log(db, ctx, "guardrail", detail, payload, actor="system")
+
+
+def _diagnose(db: Client, ctx: CallContext, settings: Settings, *, auto: bool = False) -> ToolResponse:
+    device = ctx.device
+    days_silent = days_since(device["last_announced_at"])
+    result, detail = messages.diagnostics(device["fault"], device["rent_status"], days_silent, device["monthly_rent"])
+    payload: dict[str, Any] = {"fault": device["fault"], "rent_status": device["rent_status"], "days_silent": days_silent}
+    _log(db, ctx, "diagnostics", detail, {**payload, "auto": True} if auto else payload)
+    return ToolResponse(result=result, next=messages.next_after_diagnostics(
+        device["fault"], device["rent_status"], device["status"],
+        messages.slot_options(settings.technician_slots), settings.goodwill_cap))
+
+
+def _diagnose_first(db: Client, ctx: CallContext, settings: Settings) -> None:
+    """Every fix rests on a finding: if the LLM skipped run_diagnostics on this call, run it now."""
+    if ctx.call_id and not guardrails.done_on_call(db, ctx.call_id, "diagnostics"):
+        _diagnose(db, ctx, settings, auto=True)
 
 
 def _update_device(db: Client, ctx: CallContext, values: dict[str, Any]) -> None:
@@ -75,14 +105,12 @@ def _close_tickets(db: Client, merchant_id: str, ticket_type: str) -> bool:
 
 
 @router.post("/diagnostics")
-def diagnostics(body: ToolRequest, db: Client = Depends(get_db)) -> ToolResponse:
-    ctx = _context(db, body.merchant_id)
-    device = ctx.device
-    days_silent = days_since(device["last_announced_at"])
-    result, detail = messages.diagnostics(device["fault"], device["rent_status"], days_silent, device["monthly_rent"])
-    _log(db, ctx, "diagnostics", detail,
-         {"fault": device["fault"], "rent_status": device["rent_status"], "days_silent": days_silent})
-    return ToolResponse(result=result)
+def diagnostics(
+    body: ToolRequest,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ToolResponse:
+    return _diagnose(db, _context(db, body.merchant_id), settings)
 
 
 @router.post("/book-technician")
@@ -92,14 +120,34 @@ def book_technician(
     settings: Settings = Depends(get_settings),
 ) -> ToolResponse:
     ctx = _context(db, body.merchant_id)
-    slot = (body.slot or "").strip() or messages.slot_labels(settings.technician_slots)[0]
+    _diagnose_first(db, ctx, settings)
+    labels = messages.slot_labels(settings.technician_slots)
+    fault = ctx.device["fault"]
+
+    booked = guardrails.open_booking(db, ctx.device)
+    if booked:
+        result, detail = messages.already_booked(booked["slot"], booked["booking_id"])
+        _guardrail(db, ctx, detail, {"asked_slot": body.slot, **booked})
+        return ToolResponse(result=result, next=messages.AFTER_BOOKING, booking_id=booked["booking_id"])
+    if fault in ("no_network", "frozen"):  # a restart clears these, so the fault still being there means none yet
+        result, detail = messages.restart_first(fault)
+        _guardrail(db, ctx, detail, {"fault": fault})
+        return ToolResponse(result=result, next=messages.RESTART_FIRST_NEXT)
+    picked = guardrails.match_slot(body.slot, settings.technician_slots)
+    if picked is None:
+        slots = messages.slot_options(settings.technician_slots)
+        result, detail = messages.slot_not_offered(slots)
+        _guardrail(db, ctx, detail, {"asked_slot": body.slot, "offered": labels})
+        return ToolResponse(result=result, next=messages.offer_slots(slots))
+
+    slot = labels[picked]
     booking_id = f"TB-{random.randint(1000, 9999)}"
     if ctx.device["status"] != "recovered":
         _update_device(db, ctx, {"status": "fix_scheduled"})
-    result, detail = messages.technician_booked(slot, booking_id, ctx.device["fault"])
+    result, detail = messages.technician_booked(slot, booking_id, fault)
     _log(db, ctx, "technician_booked", detail, {"booking_id": booking_id, "slot": slot})
     set_outcome(db, ctx.call, "fix_scheduled")
-    return ToolResponse(result=result, booking_id=booking_id)
+    return ToolResponse(result=result, next=messages.AFTER_BOOKING, booking_id=booking_id)
 
 
 @router.post("/resend-settlement")
@@ -131,25 +179,33 @@ def escalate(
     settings: Settings = Depends(get_settings),
 ) -> ToolResponse:
     ctx = _context(db, body.merchant_id)
-    reason = (body.reason or "").strip().lower()
+    reason = (body.reason or "").strip().lower()[:40] or "unspecified"
     escalation = messages.ESCALATIONS.get(reason, messages.FALLBACK_ESCALATION)
+    if guardrails.open_handoff(db, ctx.merchant_id, reason):
+        _guardrail(db, ctx, messages.already_handed_off(escalation), {"reason": reason})
+        return ToolResponse(result=escalation.result, next=messages.AFTER_ESCALATION)
     db.table("handoffs").insert({
         "call_id": ctx.call_id,
         "merchant_id": ctx.merchant_id,
-        "reason": reason or "unspecified",
-        "summary": (body.summary or "").strip() or "No summary given.",
+        "reason": reason,
+        "summary": guardrails.clean_summary(body.summary),
         "next_step": escalation.next_step,
     }).execute()
     if ctx.device["status"] in ("at_risk", "fix_scheduled"):
         _update_device(db, ctx, {"status": "handed_off"})
     _log(db, ctx, "escalated", messages.escalated_detail(escalation, settings.goodwill_cap), {"reason": reason})
     set_outcome(db, ctx.call, "handed_off")
-    return ToolResponse(result=escalation.result)
+    return ToolResponse(result=escalation.result, next=messages.AFTER_ESCALATION)
 
 
 @router.post("/restart-device")
-def restart_device(body: ToolRequest, db: Client = Depends(get_db)) -> ToolResponse:
+def restart_device(
+    body: ToolRequest,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ToolResponse:
     ctx = _context(db, body.merchant_id)
+    _diagnose_first(db, ctx, settings)
     fault = ctx.device["fault"]
     if fault in ("no_network", "frozen"):
         values: dict[str, Any] = {"fault": "none", "last_announced_at": utc_now().isoformat()}
@@ -159,6 +215,10 @@ def restart_device(body: ToolRequest, db: Client = Depends(get_db)) -> ToolRespo
         set_outcome(db, ctx.call, "fixed_live")
     result, detail = messages.restarted(fault)
     _log(db, ctx, "device_restarted", detail, {"fault_before": fault})
+    if fault in ("no_network", "frozen"):
+        return ToolResponse(result=result, next=messages.AFTER_RESTART)
+    if fault == "speaker_fault":
+        return ToolResponse(result=result, next=messages.offer_slots(messages.slot_options(settings.technician_slots)))
     return ToolResponse(result=result)
 
 
@@ -169,11 +229,17 @@ def goodwill_credit(
     settings: Settings = Depends(get_settings),
 ) -> ToolResponse:
     ctx = _context(db, body.merchant_id)
+    _diagnose_first(db, ctx, settings)
     amount = body.amount if body.amount and body.amount > 0 else settings.goodwill_cap
     if amount > settings.goodwill_cap:
         result, detail = messages.credit_refused(amount, settings.goodwill_cap)
         _log(db, ctx, "credit_refused", detail, {"amount": amount, "cap": settings.goodwill_cap})
-        return ToolResponse(result=result)
+        return ToolResponse(result=result, next=messages.AFTER_CREDIT_REFUSED)
+    given = guardrails.credit_this_month(db, ctx.merchant_id)
+    if given:
+        result, detail = messages.credit_already_given(given)
+        _guardrail(db, ctx, detail, {"amount": amount, "given_this_month": given})
+        return ToolResponse(result=result, next=messages.CREDIT_GIVEN_NEXT)
 
     values: dict[str, Any] = {"rent_status": "paid"}
     if ctx.device["fault"] == "none" and ctx.device["status"] == "at_risk":

@@ -52,7 +52,7 @@ def build_user_data(
         "days_silent": str(days_silent),
         "last_settlement_amount": format_inr(settlement["amount"]) if settlement else "",
         "last_settlement_date": format_day(settlement["settled_on"]) if settlement else "",
-        "slot_options": " or ".join(messages.slot_labels(settings.technician_slots)),
+        "slot_options": messages.slot_options(settings.technician_slots),
         "goodwill_cap": format_inr(settings.goodwill_cap),
     }
 

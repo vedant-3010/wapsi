@@ -1,4 +1,4 @@
-import { Clock, IndianRupee, ListChecks, LoaderCircle, Play, RotateCcw, ShieldCheck, SunMoon, Undo2 } from 'lucide-react'
+import { Clock, IndianRupee, ListChecks, LoaderCircle, Play, RotateCcw, Scale, ShieldCheck, SunMoon, Undo2 } from 'lucide-react'
 
 import { Button } from '@/components/kit/Button'
 import { StatusDot } from '@/components/kit/StatusDot'
@@ -44,7 +44,8 @@ function SafetyStrip({ config }: { config: PublicConfig }) {
   const items = [
     { icon: ShieldCheck, text: `Calls only ${config.allowed_numbers} allowlisted ${config.allowed_numbers === 1 ? 'number' : 'numbers'}` },
     { icon: Clock, text: `${hours} IST, ${config.within_calling_hours ? 'open now' : 'closed now'}`, warn: !config.within_calling_hours },
-    { icon: IndianRupee, text: `Credit cap ${formatRupees(config.goodwill_cap)}` },
+    { icon: IndianRupee, text: `Credit cap ${formatRupees(config.goodwill_cap)} a month` },
+    { icon: Scale, text: 'Every AI step checked by fixed rules' },
     { icon: ListChecks, text: 'Every action logged with who did it' },
   ]
   return (

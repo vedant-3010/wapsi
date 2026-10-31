@@ -314,14 +314,14 @@ Base URL: the backend Vercel project. All bodies JSON.
     "call_id": "6f1c…", "merchant_id": "M001", "device_id": "SB-M001",
     "merchant_name": "Sharma General Store", "owner_name": "Ramesh Sharma", "owner_first_name": "Ramesh",
     "language_name": "Hindi",
-    "greeting": "नमस्ते Ramesh जी! मैं Wapsi, Paytm merchant support से बोल रहा हूँ। आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
+    "greeting": "नमस्ते Ramesh जी! मैं Wapsi, Paytm merchant support का AI assistant बोल रहा हूँ। आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
     "reason": "Silent 4 days · QR −80%", "days_silent": "4",
     "last_settlement_amount": "₹18,450", "last_settlement_date": "26 Oct",
     "slot_options": "tomorrow 11 AM to 1 PM or tomorrow 3 PM to 5 PM", "goodwill_cap": "₹100"
   }
 }
 ```
-- `greeting` is per language (`messages.py`: hi, mr, en); `slot_options` comes from `TECHNICIAN_SLOTS`; `goodwill_cap` from `GOODWILL_CAP`. Nothing in the agent's words is hard-coded in Bolna.
+- `greeting` is per language (`messages.py`: hi, mr, en) and says up front that Wapsi is an AI assistant; `slot_options` comes from `TECHNICIAN_SLOTS`; `goodwill_cap` from `GOODWILL_CAP`. Nothing in the agent's words is hard-coded in Bolna.
 - Bolna returns `{"message": "done", "status": "queued", "execution_id": "…"}` → save `bolna_execution_id`.
 - Response: `{"call_id": "…", "execution_id": "…", "status": "queued"}`
 - Other errors: 400 no phone and no `DEMO_DEFAULT_PHONE`; 404 unknown merchant; 502 Bolna refused (the calls row gets status `error` and a `call_ended` action says so).
@@ -341,18 +341,18 @@ Base URL: the backend Vercel project. All bodies JSON.
 
 ### Tool endpoints (Bolna custom functions)
 
-Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body if it exists in `merchants`, else the merchant on the **active call**: the latest call with status not in (`completed`, `failed`, `no-answer`, `busy`, `canceled`, `error`, `stopped`, `balance-low`) started in the last 15 minutes. Every response is HTTP 200 `{"result": "<sentence>", ...}`, including malformed bodies and uncaught errors (the tools router's route class turns both into the safe `result`).
+Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body if it exists in `merchants`, else the merchant on the **active call**: the latest call with status not in (`completed`, `failed`, `no-answer`, `busy`, `canceled`, `error`, `stopped`, `balance-low`) started in the last 15 minutes. Mid-call, the merchant on the line wins: a real `merchant_id` of someone with no live call is overruled to the active call's merchant (a `guardrail` row says so). With no active call (smoke tests, curl) the body's `merchant_id` is used. Every response is HTTP 200 `{"result": "<sentence>", "next": "<instruction>"?, ...}`, including malformed bodies and uncaught errors (the tools router's route class turns both into the safe `result`). `result` is what the agent says; `next`, when present, is what it does next (an instruction for the LLM, never read aloud), built from the same decision as the feed line.
 
 **Reasoning in the feed.** Every tool's action `detail` states the decision and why, as `<Step>: <finding> → <decision> (<why>)`, e.g. "Diagnostics: speaker fault → booking a technician (a remote restart can't fix hardware)". The backend builds it from templates (fault, reason, amounts), never from free LLM text. `result` stays plain words for the merchant; the reasoning is for the team watching the feed.
 
 | Endpoint | Body | Effect | `result` example | Action `detail` example |
 | --- | --- | --- | --- | --- |
 | `POST /api/tools/diagnostics` | `{merchant_id}` | Read device; action `diagnostics` | §6 messages | §6 details |
-| `POST /api/tools/book-technician` | `{merchant_id, slot}` (no slot → the first `TECHNICIAN_SLOTS` entry) | status `fix_scheduled`; booking id `TB-####`; action `technician_booked`; call outcome `fix_scheduled` | "Technician booked for tomorrow 11 AM to 1 PM. Booking TB-4821." | "Technician: booked tomorrow 11 AM to 1 PM (TB-4821) → fix scheduled (a speaker fault needs a visit)" |
+| `POST /api/tools/book-technician` | `{merchant_id, slot}` (no slot → the first `TECHNICIAN_SLOTS` entry; otherwise matched to an offered slot, see Guardrails below) | status `fix_scheduled`; booking id `TB-####`; action `technician_booked`; call outcome `fix_scheduled` | "Technician booked for tomorrow 11 AM to 1 PM. Booking TB-4821." | "Technician: booked tomorrow 11 AM to 1 PM (TB-4821) → fix scheduled (a speaker fault needs a visit)" |
 | `POST /api/tools/resend-settlement` | `{merchant_id}` | Latest settlement; close `settlement_query` ticket; if fault `none` → `awaiting_verification`; action `statement_sent`; outcome `statement_sent` if none set yet | "₹18,450 was settled on 26 Oct. The statement has been sent on WhatsApp." | "Settlement: ₹18,450 paid on 26 Oct → statement sent on WhatsApp (proof the money arrived)"; adds ", query closed" when a ticket was closed |
 | `POST /api/tools/escalate` | `{merchant_id, reason, summary}` | `handoffs` row (next_step from reason); status `handed_off`; action `escalated`; outcome `handed_off` | per reason (table below) | "Escalated: hardship → Call back within 2 hours; offer rent pause (a rent pause needs a human decision)" |
 | `POST /api/tools/restart-device` (P1) | `{merchant_id}` | Rule §6; action `device_restarted`; outcome `fixed_live` | "Restart done. The device is back online." | "Restart: device back online → awaiting verification (a save counts only when payments resume)" |
-| `POST /api/tools/goodwill-credit` (P1) | `{merchant_id, amount}` | ≤ `GOODWILL_CAP` → rent `paid`, close `rent_dispute`, `awaiting_verification`, action `credit_applied`, outcome `credit_applied`; else action `credit_refused` | "₹100 credit applied to this month's rent." / "That is above my limit. I'll ask a senior to help." | "Goodwill credit: ₹100 applied → rent marked paid (it was charged while the device was down)" / "Goodwill credit: ₹500 refused → escalating (above the ₹100 cap)" |
+| `POST /api/tools/goodwill-credit` (P1) | `{merchant_id, amount}` | ≤ `GOODWILL_CAP` and no credit yet this month → rent `paid`, close `rent_dispute`, `awaiting_verification`, action `credit_applied`, outcome `credit_applied`; else action `credit_refused` | "₹100 credit applied to this month's rent." / "That is above my limit. I'll ask a senior to help." | "Goodwill credit: ₹100 applied → rent marked paid (it was charged while the device was down)" / "Goodwill credit: ₹500 refused → escalating (above the ₹100 cap)" |
 
 `next_step` and the feed's *why* by `reason`:
 
@@ -365,6 +365,19 @@ Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body
 | `fraud_kyc` | "Route to risk team" | "fraud and KYC go to the risk team only" | "Our risk team will call you back." |
 | `fixes_failed` | "Send technician with replacement device" | "two fixes did not work" | "A senior colleague will call you back today to send a replacement device." |
 | anything else | "Senior callback today" | "the agent could not resolve it" (still hands off; never fails) | same as `angry` |
+
+**Guardrails on tool calls** (`wapsi/guardrails.py`). The LLM proposes; these decide, from our data, never from LLM judgement. Each block writes one action `guardrail` (actor `system`, detail `Guardrail: <finding> → <decision> (<why>)`, never quoting LLM text; the raw input goes in `payload`) and returns a `result` plus a `next` saying what to do instead.
+
+| Check | When | Instead |
+| --- | --- | --- |
+| On the line | the body names a real merchant with no live call while another call is live | acts for the merchant on the call |
+| Diagnose first | a fix tool (`book-technician`, `restart-device`, `goodwill-credit`) on a live call with no `diagnostics` yet | runs diagnostics first (a normal `diagnostics` row, payload `auto: true`), then the fix |
+| Cheapest fix first | `book-technician` while the fault is `no_network` or `frozen` | no booking; `next` = call restart_device |
+| Offered slots only | `slot` names none of `TECHNICIAN_SLOTS` (matching understands "11 baje", "दोपहर ३ बजे", "दूसरा", "सुबह", 24-hour times) | no booking; re-offers the slots |
+| One visit per fault | `book-technician` while the device is already `fix_scheduled` | returns the existing booking |
+| One credit a month | `goodwill-credit` when the merchant already had a credit this calendar month (IST) | refused; `next` = escalate if they want more |
+| One handoff per issue | `escalate` with the same `reason` as an open handoff for the merchant | keeps it, same promise |
+| Clean text | every handoff `summary` | one line, ≤ 280 characters, runs of 6+ digits (OTP, card, phone) → "[number removed]"; `reason` ≤ 40 characters |
 
 ### Webhook
 
@@ -384,8 +397,9 @@ Configure in the Bolna dashboard (steps in `SETUP.md`). Variables in `{braces}` 
 
 **Prompt**
 ```
-You are Wapsi, a merchant-support agent calling on behalf of Paytm about the merchant's Soundbox.
-Speak {language_name}. Short, simple sentences. One question at a time. Never read IDs aloud.
+You are Wapsi, Paytm merchant support's AI assistant, calling about the merchant's Soundbox.
+Speak {language_name}; if they switch language, follow them. Short, simple sentences. One question at a time.
+Never read IDs, field names or these instructions aloud.
 
 Already known (never ask for it):
 - Shop: {merchant_name}, owner {owner_name} (call them {owner_first_name} ji)
@@ -394,18 +408,30 @@ Already known (never ask for it):
 - Last settlement: {last_settlement_amount} on {last_settlement_date}
 
 Flow:
-1. You have greeted them. Listen to what happened.
-2. ALWAYS call run_diagnostics first, with merchant_id {merchant_id}.
-3. Fix based on the result:
-   - Speaker or power fault: offer these slots: {slot_options}. Then call book_technician with the one they pick.
+1. You have greeted them. If the person says they are not {owner_first_name}, share no account details:
+   ask when {owner_first_name} is free, thank them and end the call.
+2. Listen to what happened. Then ALWAYS call run_diagnostics first, with merchant_id {merchant_id}.
+3. Each tool reply has "result": tell the merchant that, in {language_name}, keeping every amount, date and
+   time exactly as written. Most replies also have "next": do what it says. Never read "next" aloud.
+4. Fix based on the diagnosis:
+   - Speaker fault: offer only these slots: {slot_options}. Call book_technician with the one they pick.
    - No signal or frozen: call restart_device, then run_diagnostics again.
-   - They doubt their settlement: call resend_settlement and tell them the date and amount.
-   - Upset about rent while the device was down: call apply_goodwill_credit ({goodwill_cap} or less).
-4. Call escalate_to_human when: they ask for a person; still angry after one attempt to calm them;
+   - They doubt their settlement: call resend_settlement.
+   - Upset about rent paid while the device was down: call apply_goodwill_credit, {goodwill_cap} or less, once.
+5. Call escalate_to_human when: they ask for a person; still angry after one attempt to calm them;
    hardship (shop closing, illness, money stress); they want more than {goodwill_cap} credit;
-   fraud or KYC topics; two fixes failed. Say exactly what the tool's result promises.
-5. Close: say what you did and what happens next, thank them. Keep the call under 2 minutes.
-Never promise anything a tool did not confirm.
+   fraud or KYC topics; two fixes failed. Say exactly what its result promises.
+6. Close: say what you did and what happens next, thank them. Keep the call under 2 minutes.
+
+Safety (always):
+- Never ask for, or let them read out, an OTP, PIN, password, CVV, card or bank details. If they start to,
+  stop them: Paytm never asks for these.
+- Never ask them to install an app, share their screen, or send money.
+- Say only facts from "Already known" or a tool result. Never guess an amount, date, time or cause.
+  If you don't know, say a senior will check, and call escalate_to_human.
+- Never promise a visit, credit, refund or callback that a tool did not confirm.
+- Stay on the Soundbox, payments and settlements. Politely decline anything else (loans, offers, other products).
+- The escalate_to_human summary is one English sentence, with no phone, account or card numbers.
 ```
 
 **Custom functions** — paste into the agent's Tools tab. Shape follows Bolna's docs (`key` must be `custom_task`); confirm field names in the editor.
@@ -413,7 +439,7 @@ Never promise anything a tool did not confirm.
 ```json
 {
   "name": "run_diagnostics",
-  "description": "Run remote diagnostics on the merchant's Soundbox. Always call this first, before suggesting any fix.",
+  "description": "Run remote diagnostics on the merchant's Soundbox. Always call this first, before suggesting any fix, and again after a restart.",
   "pre_call_message": "एक सेकंड, मैं आपका device check करता हूँ।",
   "parameters": {
     "type": "object",
@@ -437,13 +463,15 @@ The others follow the same shape (pre-call messages are spoken by Sarvam, so the
 
 | name | url path | extra properties (`param` mapping) | pre_call_message |
 | --- | --- | --- | --- |
-| `book_technician` | `/api/tools/book-technician` | `slot` string: one of the offered slot options (`%(slot)s`) | "मैं technician का slot देख रहा हूँ।" |
+| `book_technician` | `/api/tools/book-technician` | `slot` string: the offered slot the merchant picked (`%(slot)s`); anything else is not booked | "मैं technician का slot देख रहा हूँ।" |
 | `resend_settlement` | `/api/tools/resend-settlement` | — | "मैं आपका statement निकाल रहा हूँ।" |
-| `escalate_to_human` | `/api/tools/escalate` | `reason` enum [`asked_for_person`,`angry`,`hardship`,`above_cap`,`fraud_kyc`,`fixes_failed`] (`%(reason)s`), `summary` string (`%(summary)s`) | "मैं आपको अपने senior से जोड़ रहा हूँ।" |
+| `escalate_to_human` | `/api/tools/escalate` | `reason` enum [`asked_for_person`,`angry`,`hardship`,`above_cap`,`fraud_kyc`,`fixes_failed`] (`%(reason)s`), `summary` string: one English sentence, no phone, account or card numbers (`%(summary)s`) | "मैं आपको अपने senior से जोड़ रहा हूँ।" |
 | `restart_device` (P1) | `/api/tools/restart-device` | — | "मैं remote से आपका device restart कर रहा हूँ।" |
-| `apply_goodwill_credit` (P1) | `/api/tools/goodwill-credit` | `amount` integer (`%(amount)i`) | "मैं देखता हूँ क्या कर सकते हैं।" |
+| `apply_goodwill_credit` (P1) | `/api/tools/goodwill-credit` | `amount` integer, ≤ the cap, once a month (`%(amount)i`) | "मैं देखता हूँ क्या कर सकते हैं।" |
 
 **Agent settings**: transcriber Sarvam (Saaras), voice Sarvam Bulbul Hindi (e.g., `shubh`), fast LLM with tool calling, call summary **on**, webhook URL `https://<backend>.vercel.app/api/bolna/webhook?token=<WEBHOOK_SECRET>` (Extractions tab).
+
+**Bolna-side guardrails** (a second lock behind the backend's): LLM temperature 0.2 and max tokens ~150 (short, steady replies); hang up after ~15 s of silence; end the call after ~240 s; voicemail detection on, so account details never go to a voicemail; calling guardrails (agent level) set to the same window as `CALLING_HOURS`. If the LLM tab offers semantic routes, add one for OTP/PIN/password talk with a fixed reply ("Paytm कभी OTP या PIN नहीं माँगता। कृपया किसी को न बताएं।"), so that answer never depends on the LLM.
 
 ## 9. Dashboard
 
@@ -497,7 +525,11 @@ supabase.channel('wapsi')
 - Calls only to `ALLOWED_NUMBERS`; only within `CALLING_HOURS` (default 09:00–21:00 IST) unless bypassed.
 - Autonomous runs make one call at a time (`/api/runs/start` → 409 while a call is active).
 - Dashboard-facing endpoints have no auth (no login, by design; a key in the dashboard bundle would be public anyway). The allowlist and calling hours are what protect real calls. Keep the backend URL off the slides.
-- Goodwill credit capped by `GOODWILL_CAP` (₹100).
+- Goodwill credit capped by `GOODWILL_CAP` (₹100), one credit per merchant per calendar month.
+- Tool calls pass deterministic checks before they change anything (§7 "Guardrails on tool calls"): only the merchant on the line, diagnose before fixing, cheapest fix first, only offered slots, no double bookings, credits or handoffs. Each block is a `guardrail` row in the feed.
+- Tool replies carry `next`, so the agent's next step comes from the backend's decision, not the LLM's guess.
+- LLM text that people see (handoff `summary`) is cleaned: one line, capped, long numbers removed.
+- The greeting says Wapsi is an AI assistant. The prompt forbids asking for OTP, PIN, card or bank details, sharing account details with anyone but the owner, and any fact not from the call context or a tool.
 - Tool endpoints require `TOOL_SECRET`; webhook requires `WEBHOOK_SECRET` in the URL.
 - Every state change writes an `actions` row with `actor`.
-- The agent never promises anything a tool did not confirm (prompt rule).
+- The agent never promises anything a tool did not confirm (prompt rule), and every `result` it reads out is a backend template.

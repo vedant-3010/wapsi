@@ -12,15 +12,15 @@ SAFE_RESULT = "I couldn't check that right now; a senior will call back."
 
 LANGUAGE_NAMES = {"hi": "Hindi", "mr": "Marathi", "en": "English"}
 
-# The agent's first line (Bolna welcome message = {greeting}). Native script reads best with Sarvam
-# Bulbul; brand words stay in English, as merchants say them.
+# The agent's first line (Bolna welcome message = {greeting}). It says up front that it's an AI.
+# Native script reads best with Sarvam Bulbul; brand words stay in English, as merchants say them.
 _GREETINGS = {
-    "hi": "नमस्ते {name} जी! मैं Wapsi, Paytm merchant support से बोल रहा हूँ। "
+    "hi": "नमस्ते {name} जी! मैं Wapsi, Paytm merchant support का AI assistant बोल रहा हूँ। "
           "आपके Soundbox में कुछ दिक्कत दिख रही है। क्या हुआ?",
-    "mr": "नमस्कार {name} जी! मी Wapsi, Paytm merchant support मधून बोलतोय. "
+    "mr": "नमस्कार {name} जी! मी Wapsi, Paytm merchant support चा AI assistant बोलतोय. "
           "तुमच्या Soundbox मध्ये काहीतरी अडचण दिसतेय. काय झालं?",
-    "en": "Hello {name}! This is Wapsi from Paytm merchant support. Your Soundbox seems to have a problem. "
-          "What happened?",
+    "en": "Hello {name}! This is Wapsi, the AI assistant from Paytm merchant support. "
+          "Your Soundbox seems to have a problem. What happened?",
 }
 
 
@@ -31,6 +31,11 @@ def greeting(language: str, first_name: str) -> str:
 def slot_labels(slots: list[str]) -> list[str]:
     """TECHNICIAN_SLOTS as the agent offers them: "tomorrow 11 AM to 1 PM"."""
     return [f"tomorrow {slot}" for slot in slots]
+
+
+def slot_options(slots: list[str]) -> str:
+    """All of them in one phrase: "tomorrow 11 AM to 1 PM or tomorrow 3 PM to 5 PM"."""
+    return " or ".join(slot_labels(slots))
 
 
 def diagnostics(fault: str, rent_status: str, days_silent: int, rent: int) -> tuple[str, str]:
@@ -154,6 +159,87 @@ def credit_refused(amount: int, cap: int) -> tuple[str, str]:
         "That is above my limit. I'll ask a senior to help.",
         f"Goodwill credit: {format_inr(amount)} refused → escalating (above the {format_inr(cap)} cap)",
     )
+
+
+# What the agent does next (`next` in a tool reply): an instruction for the LLM, never read aloud.
+# It carries the same decision as the feed line, so the call goes the way the feed says it will.
+
+def next_after_diagnostics(fault: str, rent_status: str, status: str, slot_options: str, cap: int) -> str:
+    if fault == "speaker_fault":
+        return offer_slots(slot_options)
+    if fault in ("no_network", "frozen"):
+        return "Call restart_device now, then run_diagnostics again."
+    if status == "awaiting_verification":
+        return "The device works now. Tell them, then ask if anything else is wrong."
+    if rent_status == "failed":
+        return (f"Ask about the rent. If they are upset they paid while the device was down,"
+                f" call apply_goodwill_credit with {format_inr(cap)} or less.")
+    return "Ask what is wrong. If they doubt a settlement, call resend_settlement."
+
+
+def offer_slots(slot_options: str) -> str:
+    return f"Offer only these slots: {slot_options}. Then call book_technician with the one they pick."
+
+
+AFTER_BOOKING = "Tell them the visit time, then ask if anything else is wrong."
+AFTER_RESTART = "Call run_diagnostics again to confirm the fix."
+AFTER_ESCALATION = "Say the result as it is, thank them and close the call."
+AFTER_CREDIT_REFUSED = "Call escalate_to_human with reason above_cap."
+
+
+# Guardrails (SPEC §11): the backend held back what the LLM asked for, and says what to do instead.
+# Feed rows are type `guardrail`, actor `system`; never quote LLM text in them (it goes in the payload).
+
+def slot_not_offered(slot_options: str) -> tuple[str, str]:
+    return (
+        f"That time isn't available. I can book {slot_options}. Which one suits you?",
+        "Guardrail: slot not on offer → asked the merchant to pick again (only offered slots can be booked)",
+    )
+
+
+def already_booked(slot: str, booking_id: str) -> tuple[str, str]:
+    return (
+        f"A technician is already booked for {slot}. Booking {booking_id}.",
+        f"Guardrail: technician already booked ({booking_id}) → kept that booking (one visit per fault)",
+    )
+
+
+_REMOTE_FIX = {
+    "no_network": "no signal is usually fixed remotely",
+    "frozen": "a frozen device is usually fixed remotely",
+}
+
+
+def restart_first(fault: str) -> tuple[str, str]:
+    return (
+        "This can usually be fixed without a visit. Let me restart your device remotely first.",
+        "Guardrail: technician visit held → trying a remote restart first"
+        f" ({_REMOTE_FIX.get(fault, 'a restart is quicker than a visit')})",
+    )
+
+
+RESTART_FIRST_NEXT = "Call restart_device now. Book a technician only if the restart doesn't fix it."
+
+
+def credit_already_given(given: int) -> tuple[str, str]:
+    return (
+        f"A goodwill credit of {format_inr(given)} is already applied this month. That is the most I can give.",
+        f"Guardrail: {format_inr(given)} credit already given this month → no second credit"
+        " (one goodwill credit a month)",
+    )
+
+
+CREDIT_GIVEN_NEXT = ("Don't call apply_goodwill_credit again."
+                     " If they want more, call escalate_to_human with reason above_cap.")
+
+
+def already_handed_off(escalation: Escalation) -> str:
+    return f"Guardrail: already handed off ({escalation.label}) → kept the open handoff (one handoff per issue)"
+
+
+def other_merchant(name: str) -> str:
+    return (f"Guardrail: tool named another merchant → acted for {name}, who is on the call"
+            " (never act for a merchant who isn't on the line)")
 
 
 # System and human feed lines (no `result`: nobody is on the phone).
