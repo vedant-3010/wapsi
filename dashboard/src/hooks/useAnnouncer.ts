@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 
+import { ANNOUNCEMENTS } from '@/lib/announce'
 import type { Language } from '@/lib/types'
-
-// What a Soundbox says when a payment lands, in the merchant's language. The amount is spoken as
-// digits; Indian voices read them in the language.
-const PHRASES: Record<Language, { lang: string; text: (amount: number) => string }> = {
-  hi: { lang: 'hi-IN', text: (n) => `Paytm पर ${n} रुपये प्राप्त हुए` },
-  mr: { lang: 'mr-IN', text: (n) => `Paytm वर ${n} रुपये मिळाले` },
-  en: { lang: 'en-IN', text: (n) => `Received ${n} rupees on Paytm` },
-}
 
 function pickVoice(lang: string): SpeechSynthesisVoice | undefined {
   const voices = window.speechSynthesis.getVoices()
@@ -52,7 +45,7 @@ export function useAnnouncer() {
       })
     }
     if (!amount || !('speechSynthesis' in window)) return
-    const phrase = PHRASES[language] ?? PHRASES.hi
+    const phrase = ANNOUNCEMENTS[language] ?? ANNOUNCEMENTS.hi
     const speech = new SpeechSynthesisUtterance(phrase.text(amount))
     speech.lang = phrase.lang
     const voice = pickVoice(phrase.lang) ?? pickVoice('hi-IN')

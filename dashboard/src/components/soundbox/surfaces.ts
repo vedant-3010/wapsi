@@ -4,6 +4,7 @@ import { CanvasTexture, SRGBColorSpace } from 'three'
 
 const NAVY = '#002e6e'
 const SKY = '#00baf2'
+const INK = '#1b1b1f'
 
 function texture(canvas: HTMLCanvasElement): CanvasTexture {
   const t = new CanvasTexture(canvas)
@@ -21,22 +22,21 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
   return [c, ctx]
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath()
-  ctx.roundRect(x, y, w, h, r)
-}
-
-/** The "paytm" wordmark as type: "pay" in navy, "tm" in sky. */
+/** "Paytm" as type: "Pay" in navy, "tm" in sky, heavy and slightly slanted like the mark. */
 function wordmark(ctx: CanvasRenderingContext2D, cx: number, y: number, size: number) {
-  ctx.font = `800 ${size}px "Geist Variable", system-ui, sans-serif`
+  ctx.save()
+  ctx.font = `900 ${size}px "Geist Variable", system-ui, sans-serif`
   ctx.textBaseline = 'alphabetic'
-  const pay = ctx.measureText('pay').width
+  ctx.textAlign = 'left'
+  const pay = ctx.measureText('Pay').width
   const tm = ctx.measureText('tm').width
-  const x = cx - (pay + tm) / 2
+  ctx.translate(cx - (pay + tm) / 2, y)
+  ctx.transform(1, 0, -0.12, 1, 0, 0) // a light italic slant
   ctx.fillStyle = NAVY
-  ctx.fillText('pay', x, y)
+  ctx.fillText('Pay', 0, 0)
   ctx.fillStyle = SKY
-  ctx.fillText('tm', x + pay, y)
+  ctx.fillText('tm', pay - size * 0.02, 0)
+  ctx.restore()
 }
 
 /** A QR-looking pattern from a fixed seed. Decorative only: it encodes nothing and can't be scanned to pay. */
@@ -49,109 +49,128 @@ function decorativeQr(ctx: CanvasRenderingContext2D, x: number, y: number, size:
     return seed / 4294967296
   }
   const finder = (r: number, c: number) => (r < 8 && c < 8) || (r < 8 && c >= n - 8) || (r >= n - 8 && c < 8)
-  ctx.fillStyle = '#111827'
+  ctx.fillStyle = INK
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
-      if (!finder(r, c) && random() > 0.52) ctx.fillRect(x + c * cell, y + r * cell, cell + 0.5, cell + 0.5)
+      if (!finder(r, c) && random() > 0.5) ctx.fillRect(x + c * cell, y + r * cell, cell + 0.6, cell + 0.6)
     }
   }
   for (const [r, c] of [[0, 0], [0, n - 7], [n - 7, 0]]) {
     const fx = x + c * cell
     const fy = y + r * cell
+    ctx.fillStyle = INK
     ctx.fillRect(fx, fy, cell * 7, cell * 7)
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(fx + cell, fy + cell, cell * 5, cell * 5)
-    ctx.fillStyle = '#111827'
+    ctx.fillStyle = INK
     ctx.fillRect(fx + cell * 2, fy + cell * 2, cell * 3, cell * 3)
   }
 }
 
-/** The QR stand: blue frame, white card, wordmark, "Accepted Here", the QR, a UPI footer. */
-export function standeeTexture(): CanvasTexture {
-  const [c, ctx] = canvas(768, 1024)
-  ctx.fillStyle = SKY
-  roundRect(ctx, 0, 0, 768, 1024, 40)
-  ctx.fill()
-  ctx.fillStyle = '#ffffff'
-  roundRect(ctx, 26, 26, 716, 972, 26)
-  ctx.fill()
-
-  wordmark(ctx, 384, 168, 120)
-  ctx.fillStyle = NAVY
-  ctx.font = '600 38px "Geist Variable", system-ui, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText('Accepted Here', 384, 226)
-
-  ctx.fillStyle = '#ffffff'
-  roundRect(ctx, 154, 270, 460, 460, 18)
-  ctx.fill()
-  ctx.strokeStyle = '#e5e7eb'
-  ctx.lineWidth = 4
-  ctx.stroke()
-  decorativeQr(ctx, 184, 300, 400)
-
-  ctx.fillStyle = NAVY
-  ctx.font = '600 34px "Geist Variable", system-ui, sans-serif'
-  ctx.fillText('Scan & pay with any UPI app', 384, 806)
-  ctx.fillStyle = '#f1f5f9'
-  roundRect(ctx, 214, 850, 340, 84, 42)
-  ctx.fill()
-  ctx.font = '800 40px "Geist Variable", system-ui, sans-serif'
-  ctx.fillStyle = NAVY
-  ctx.fillText('UPI', 384, 906)
-  return texture(c)
-}
-
-/** The black top: a contactless mark and a "Tap card" hint (the display is its own glowing mesh). */
-export function panelTexture(): CanvasTexture {
-  const [c, ctx] = canvas(1024, 600)
-  ctx.clearRect(0, 0, 1024, 600)
-  ctx.strokeStyle = 'rgba(255,255,255,0.82)'
-  ctx.lineCap = 'round'
-  ctx.lineWidth = 12
-  const cx = 512
-  const cy = 170
-  for (let i = 0; i < 4; i++) {
-    const r = 26 + i * 26
-    ctx.beginPath()
-    ctx.arc(cx - 50, cy, r, -Math.PI / 4, Math.PI / 4)
-    ctx.stroke()
-  }
-  ctx.fillStyle = 'rgba(255,255,255,0.55)'
-  ctx.font = '500 34px "Geist Variable", system-ui, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.fillText('Tap card to pay', cx, 300)
-  return texture(c)
-}
-
-/** Speaker holes on the base's front. */
-export function grilleTexture(): CanvasTexture {
-  const [c, ctx] = canvas(1024, 200)
-  ctx.clearRect(0, 0, 1024, 200)
-  ctx.fillStyle = 'rgba(8, 22, 54, 0.55)'
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col < 44; col++) {
-      const x = 70 + col * 20 + (row % 2) * 10
-      const y = 40 + row * 30
+/** Speaker holes: columns of dots that get longer toward the middle, like a pair of brackets. */
+function grille(ctx: CanvasRenderingContext2D, x0: number, mirror: boolean) {
+  const lengths = [11, 14, 16, 17] // outer column → inner column
+  const gap = 30
+  ctx.fillStyle = INK
+  lengths.forEach((rows, i) => {
+    const x = mirror ? x0 - i * gap : x0 + i * gap
+    for (let r = 0; r < rows; r++) {
+      const y = 560 - ((rows - 1) * gap) / 2 + r * gap
       ctx.beginPath()
-      ctx.arc(x, y, 5.5, 0, Math.PI * 2)
+      ctx.arc(x, y, 8.5, 0, Math.PI * 2)
       ctx.fill()
     }
+  })
+}
+
+/** The BHIM | UPI footer: grey italic type with the little tricolour chevrons. */
+function upiFooter(ctx: CanvasRenderingContext2D, cy: number) {
+  const chevron = (x: number, y: number) => {
+    ctx.fillStyle = '#f47b20'
+    ctx.beginPath()
+    ctx.moveTo(x, y - 22)
+    ctx.lineTo(x + 18, y)
+    ctx.lineTo(x + 6, y)
+    ctx.lineTo(x - 12, y - 22)
+    ctx.fill()
+    ctx.fillStyle = '#1e9b4b'
+    ctx.beginPath()
+    ctx.moveTo(x + 12, y - 22)
+    ctx.lineTo(x + 30, y)
+    ctx.lineTo(x + 18, y)
+    ctx.lineTo(x, y - 22)
+    ctx.fill()
   }
+  ctx.save()
+  ctx.font = 'italic 900 60px "Geist Variable", system-ui, sans-serif'
+  ctx.fillStyle = '#6d6e71'
+  ctx.textAlign = 'left'
+  ctx.fillText('BHIM', 300, cy)
+  chevron(468, cy - 8)
+  ctx.fillRect(522, cy - 52, 4, 62)
+  ctx.fillText('UPI', 548, cy)
+  chevron(660, cy - 8)
+  ctx.font = '500 13px "Geist Variable", system-ui, sans-serif'
+  ctx.fillText('BHARAT INTERFACE FOR MONEY', 300, cy + 26)
+  ctx.fillText('UNIFIED PAYMENTS INTERFACE', 548, cy + 26)
+  ctx.restore()
+}
+
+/** The white front plate, as printed on the real device. `upiId` is a demo ID, never a real one. */
+export function faceplateTexture(upiId: string): CanvasTexture {
+  const [c, ctx] = canvas(1024, 1024)
+  ctx.clearRect(0, 0, 1024, 1024)
+  ctx.save()
+  ctx.beginPath()
+  ctx.roundRect(0, 0, 1024, 1024, 236)
+  ctx.clip()
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, 1024, 1024)
+
+  wordmark(ctx, 512, 205, 116)
+  ctx.textAlign = 'center'
+  ctx.fillStyle = INK
+  ctx.font = '600 50px "Geist Variable", system-ui, sans-serif'
+  ctx.fillText('Accepted Here', 512, 268)
+  ctx.font = '600 36px "Geist Variable", system-ui, sans-serif'
+  ctx.fillText('Scan & Pay using any UPI App', 512, 350)
+
+  decorativeQr(ctx, 332, 382, 360)
+  grille(ctx, 120, false)
+  grille(ctx, 904, true)
+
+  ctx.font = '600 32px "Geist Variable", system-ui, sans-serif'
+  ctx.fillStyle = INK
+  ctx.fillText(`UPI ID: ${upiId}`, 512, 800)
+  upiFooter(ctx, 902)
+  ctx.restore()
   return texture(c)
 }
 
-/** The little display: one line of glowing mono text. */
-export function displayTexture(text: string, color: string): CanvasTexture {
-  const [c, ctx] = canvas(640, 200)
-  ctx.fillStyle = '#05070b'
-  ctx.fillRect(0, 0, 640, 200)
-  ctx.font = `600 ${text.length > 8 ? 78 : 96}px "Geist Mono Variable", ui-monospace, monospace`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.shadowColor = color
-  ctx.shadowBlur = 26
-  ctx.fillStyle = color
-  ctx.fillText(text, 320, 104)
+export type ButtonIcon = 'minus' | 'plus' | 'power' | 'replay'
+
+/** A glyph pressed into a top button. */
+export function buttonTexture(icon: ButtonIcon): CanvasTexture {
+  const [c, ctx] = canvas(128, 128)
+  ctx.clearRect(0, 0, 128, 128)
+  ctx.strokeStyle = 'rgba(14, 78, 140, 0.75)'
+  ctx.lineWidth = 9
+  ctx.lineCap = 'round'
+  ctx.beginPath()
+  if (icon === 'minus' || icon === 'plus') {
+    ctx.moveTo(40, 64)
+    ctx.lineTo(88, 64)
+    if (icon === 'plus') {
+      ctx.moveTo(64, 40)
+      ctx.lineTo(64, 88)
+    }
+  } else if (icon === 'power') {
+    ctx.arc(64, 68, 24, -Math.PI * 0.3, Math.PI * 1.3)
+    ctx.moveTo(64, 34)
+    ctx.lineTo(64, 64)
+  } else {
+    ctx.arc(64, 64, 22, 0, Math.PI * 2)
+  }
+  ctx.stroke()
   return texture(c)
 }
