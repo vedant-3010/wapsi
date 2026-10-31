@@ -38,6 +38,13 @@ export default function App() {
 
   const nameOf = (merchantId: string) => dash.queue.find((r) => r.merchant_id === merchantId)?.name ?? merchantId
   const callActive = useCallActive(dash.call)
+  // The merchant /api/runs/start will pick: the queue is already in its order.
+  const nextUp = dash.queue.find((r) => r.cohort === 'wapsi' && r.status === 'at_risk') ?? null
+  const run = () => void act('run', api.startRun, (r) => `Wapsi picked ${nameOf(r.merchant_id)} · ${r.reason}`)
+  const simulate = () =>
+    void act('simulate', api.simulateNextDay, (r) =>
+      `Next day · ${r.recovered} verified save${r.recovered === 1 ? '' : 's'} · ` +
+      `${r.holdout_recovered} holdout recovered on their own`)
 
   return (
     <MotionConfig reducedMotion="user">
@@ -48,13 +55,9 @@ export default function App() {
           callActive={callActive}
           realtime={dash.realtime}
           config={dash.config}
-          onRun={() => void act('run', api.startRun, (r) => `Wapsi picked ${nameOf(r.merchant_id)} · ${r.reason}`)}
+          onRun={run}
           onReset={() => void act('reset', api.resetDemo, () => 'Demo reset to the start')}
-          onSimulate={() =>
-            void act('simulate', api.simulateNextDay, (r) =>
-              `Next day · ${r.recovered} verified save${r.recovered === 1 ? '' : 's'} · ` +
-              `${r.holdout_recovered} holdout recovered on their own`)
-          }
+          onSimulate={simulate}
         />
         {dash.error && (
           <div className="rounded-control bg-coral-soft px-4 py-2.5 text-[14px] text-coral">
@@ -79,6 +82,12 @@ export default function App() {
               feed={dash.feed}
               series={dash.device ? dash.series[dash.device.id] : undefined}
               loaded={dash.loaded}
+              call={dash.call}
+              callActive={callActive}
+              nextUp={nextUp}
+              pending={pending}
+              onRun={run}
+              onSimulate={simulate}
             />
             <HandoffQueue
               handoffs={dash.handoffs}
@@ -95,7 +104,7 @@ export default function App() {
       </div>
       <Toaster
         theme="light"
-        position="bottom-left"
+        position="bottom-right"
         toastOptions={{
           classNames: {
             toast: '!bg-paper !rounded-[16px] !border !border-line !shadow-pop !text-ink-1 !font-sans !text-[15px]',

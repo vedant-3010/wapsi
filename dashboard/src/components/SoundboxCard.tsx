@@ -1,4 +1,4 @@
-import { BadgeCheck, Clock, type LucideIcon, Maximize2, UsersRound, Volume2, VolumeX, Wrench } from 'lucide-react'
+import { BadgeCheck, Clock, type LucideIcon, Maximize2, MonitorPlay, UsersRound, Volume2, VolumeX, Wrench } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
@@ -8,12 +8,12 @@ import { Sparkline } from '@/components/kit/Sparkline'
 import { type Tone } from '@/components/kit/StatusDot'
 import { TAG } from '@/lib/tones'
 import { Panel } from '@/components/Panel'
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
+import { DemoStage } from '@/components/soundbox/DemoStage'
 import { useAnnouncer } from '@/hooks/useAnnouncer'
 import { paymentAmount } from '@/lib/feed'
 import { daysSince, formatDayTime, formatRupees } from '@/lib/format'
 import { SPRING_POP } from '@/lib/motion'
-import type { Action, Device, DeviceStatus, Language } from '@/lib/types'
+import type { Action, Call, Device, DeviceStatus, Language, RiskRow } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 // The 3D model (three.js) loads on its own, after the dashboard; the 2D device shows meanwhile.
@@ -97,16 +97,26 @@ type SoundboxCardProps = {
   feed: Action[]
   series: number[] | undefined
   loaded: boolean
+  call: Call | null
+  callActive: boolean
+  /** Who Wapsi calls next: the demo stage shows their Soundbox before the first call. */
+  nextUp: RiskRow | null
+  pending: string | null
+  onRun: () => void
+  onSimulate: () => void
 }
 
 // F9. The Soundbox of the latest call. When its payments resume it chimes, says the amount and celebrates.
-export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps) {
+export function SoundboxCard({
+  device, feed, series, loaded, call, callActive, nextUp, pending, onRun, onSimulate,
+}: SoundboxCardProps) {
   const announce = useAnnouncer()
   // Keyed by id + created_at: a demo reset restarts action ids at 1, so ids alone repeat.
   const seen = useRef<Set<string> | null>(null)
   const [ding, setDing] = useState<{ deviceId: string; amount: number; at: number } | null>(null)
   const [webgl] = useState(hasWebGL)
-  const language: Language = device?.merchants?.language ?? 'hi'
+  const [stage, setStage] = useState(false)
+  const language: Language = device?.merchants?.language ?? nextUp?.language ?? 'hi'
 
   useEffect(() => {
     if (!loaded) return
@@ -131,9 +141,21 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
     return () => window.clearTimeout(id)
   }, [ding])
 
-  const [stage, setStage] = useState(false)
+  // The device on screen: the latest call's or, before any call, the one Wapsi will call next.
+  const subject = device
+    ? {
+        id: device.id, merchantId: device.merchant_id, status: device.status,
+        name: device.merchants?.name ?? device.merchant_id, days: daysSince(device.last_announced_at),
+        subtitle: `Last spoke ${formatDayTime(device.last_announced_at)}`,
+      }
+    : nextUp
+      ? {
+          id: nextUp.device_id, merchantId: nextUp.merchant_id, status: nextUp.status, name: nextUp.name,
+          days: nextUp.days_silent, subtitle: `Next for Wapsi · ${nextUp.reason}`,
+        }
+      : null
 
-  if (!device) {
+  if (!subject) {
     return (
       <Panel title="Virtual Soundbox">
         <p className="text-[15px] leading-relaxed text-ink-3">
@@ -143,20 +165,18 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
     )
   }
 
-  const look = LOOKS[device.status]
+  const look = LOOKS[subject.status]
   const Icon = look.icon
-  const days = daysSince(device.last_announced_at)
-  const live = ding?.deviceId === device.id ? ding : null
-  const today = device.status === 'recovered'
+  const live = ding?.deviceId === subject.id ? ding : null
+  const today = subject.status === 'recovered'
   const before = series && series.length > 4 ? Math.round(series.slice(0, -4).reduce((a, b) => a + b, 0) / (series.length - 4)) : null
   const after = series?.length ? series[series.length - 1] : null
-  const name = device.merchants?.name ?? device.merchant_id
   // A demo UPI ID, clearly not a real one: nothing on screen can take a payment.
-  const upiId = `demo-${device.merchant_id.toLowerCase()}@wapsi`
-  const lastPaid = [...feed].reverse().find((a) => a.type === 'payments_resumed' && a.device_id === device.id)
+  const upiId = `demo-${subject.merchantId.toLowerCase()}@wapsi`
+  const lastPaid = device && [...feed].reverse().find((a) => a.type === 'payments_resumed' && a.device_id === device.id)
 
   const replay = () => {
-    if (!lastPaid) return
+    if (!lastPaid || !device) return
     const amount = paymentAmount(lastPaid)
     announce(amount, language)
     setDing({ deviceId: device.id, amount, at: Date.now() })
@@ -167,22 +187,22 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
       <Suspense
         fallback={
           <div className="grid h-full place-items-center">
-            <Device look={look} ding={live} days={days} />
+            <Device look={look} ding={live} days={subject.days} />
           </div>
         }
       >
         <SoundboxModel
-          status={device.status}
+          status={subject.status}
           ding={live}
           upiId={upiId}
           language={language}
           variant={variant}
-          label={`${name}'s Soundbox: ${look.label}`}
+          label={`${subject.name}'s Soundbox: ${look.label}`}
         />
       </Suspense>
     ) : (
       <div className="grid h-full place-items-center">
-        <Device look={look} ding={live} days={days} />
+        <Device look={look} ding={live} days={subject.days} />
       </div>
     )
 
@@ -202,7 +222,7 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
         </motion.span>
       ) : (
         <motion.span
-          key={device.status}
+          key={subject.status}
           initial={{ opacity: 0, x: -6 }}
           animate={{ opacity: 1, x: 0 }}
           transition={SPRING_POP}
@@ -214,6 +234,41 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
       )}
     </AnimatePresence>
   )
+
+  const demoStage = (
+    <DemoStage
+      open={stage}
+      onOpenChange={setStage}
+      model={stage && model('stage')}
+      confetti={live && stage && <Confetti key={live.at} />}
+      deviceId={subject.id}
+      name={subject.name}
+      subtitle={subject.subtitle}
+      statusTag={statusTag}
+      call={call}
+      feed={feed}
+      callActive={callActive}
+      pending={pending}
+      onRun={onRun}
+      onSimulate={onSimulate}
+      onReplay={lastPaid ? replay : null}
+    />
+  )
+
+  if (!device) {
+    return (
+      <Panel title="Virtual Soundbox">
+        <p className="text-[15px] leading-relaxed text-ink-3">
+          The Soundbox of the merchant Wapsi calls appears here, and speaks when their payments come back.
+        </p>
+        <Button className="mt-4 w-full" onClick={() => setStage(true)}>
+          <MonitorPlay />
+          Open the demo stage
+        </Button>
+        {demoStage}
+      </Panel>
+    )
+  }
 
   const chart = series && series.length > 1 && (
     <div>
@@ -247,8 +302,8 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
           <button
             type="button"
             onClick={() => setStage(true)}
-            aria-label="Open the Soundbox in a large 3D view"
-            title="Open in 3D"
+            aria-label="Open the demo stage: the Soundbox in 3D with the live call"
+            title="Open the demo stage"
             className="grid size-8 place-items-center rounded-full text-ink-2 transition-[background-color,scale] hover:bg-paper-3 hover:text-ink-1 active:scale-90"
           >
             <Maximize2 className="size-4" />
@@ -260,59 +315,20 @@ export function SoundboxCard({ device, feed, series, loaded }: SoundboxCardProps
         {!stage && model('card')}
         {live && !stage && <Confetti key={live.at} />}
         {webgl && (
-          <span className="pointer-events-none absolute right-6 bottom-1 text-[12px] text-ink-4">Drag to turn · double-click to enlarge</span>
+          <span className="pointer-events-none absolute right-6 bottom-1 text-[12px] text-ink-4">Drag to turn · double-click for the demo stage</span>
         )}
       </div>
 
       <div className="mt-1 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="line-clamp-2 font-display text-[22px] leading-[1.15] font-bold tracking-tight">{name}</div>
-          <div className="mt-1 text-[13px] text-ink-3">Last spoke {formatDayTime(device.last_announced_at)}</div>
+          <div className="line-clamp-2 font-display text-[22px] leading-[1.15] font-bold tracking-tight">{subject.name}</div>
+          <div className="mt-1 text-[13px] text-ink-3">{subject.subtitle}</div>
         </div>
         <div className="mt-1 shrink-0 whitespace-nowrap">{statusTag}</div>
       </div>
 
       {chart && <div className="mt-5 border-t border-line pt-4">{chart}</div>}
-
-      {/* The demo view: the device big, on a slow turntable. */}
-      <Dialog open={stage} onOpenChange={setStage}>
-        <DialogContent className="max-h-[92vh] w-[94vw] max-w-[1100px] gap-0 overflow-hidden rounded-dialog border border-line bg-paper p-0 shadow-pop sm:max-w-[1100px]">
-          <div className="grid md:grid-cols-[minmax(0,1fr)_340px]">
-            <div className="relative h-[52vh] bg-[radial-gradient(circle_at_50%_40%,#ffffff_0%,#f5f3ee_70%)] md:h-[72vh]">
-              {stage && model('stage')}
-              {live && stage && <Confetti key={live.at} />}
-              <span className="pointer-events-none absolute bottom-3 left-1/2 -translate-x-1/2 text-[13px] text-ink-3">
-                Drag to turn · scroll to zoom
-              </span>
-            </div>
-            <div className="flex flex-col gap-5 border-t border-line p-7 md:border-t-0 md:border-l">
-              <div>
-                <div className="caption">Virtual Soundbox · {device.id}</div>
-                <DialogTitle className="mt-1 font-display text-[32px] leading-[1.1] font-bold tracking-tight">{name}</DialogTitle>
-                <DialogDescription className="mt-1 text-[14px] text-ink-3">
-                  Last spoke {formatDayTime(device.last_announced_at)}
-                </DialogDescription>
-              </div>
-              <div>{statusTag}</div>
-              {chart}
-              <p className="text-[14px] leading-relaxed text-ink-2">
-                The status light on top shows what Wapsi knows about this device; when payments come back it chimes and
-                says the amount in the merchant’s language.
-              </p>
-              <div className="mt-auto">
-                {lastPaid ? (
-                  <Button variant="primary" className="w-full" onClick={replay}>
-                    <Volume2 />
-                    Replay the announcement
-                  </Button>
-                ) : (
-                  <p className="text-[13px] text-ink-3">Simulate the next day after a fix to hear it announce a payment.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {demoStage}
     </Panel>
   )
 }

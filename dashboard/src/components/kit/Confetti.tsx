@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-// Soft pastels from the palette, plus one hint of Paytm blue.
+// The Paytm palette: navy, cyan, and the state colours.
 const COLORS = ['#172b75', '#00bcf1', '#4cc38a', '#f2b23e', '#7fd9f7', '#c9d5f5']
 
 // Fixed, hand-spread pieces (no randomness: the burst looks the same every time).
