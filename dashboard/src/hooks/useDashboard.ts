@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
 import { api } from '@/lib/api'
 import { startOfTodayIst } from '@/lib/format'
@@ -57,6 +57,23 @@ export function isCallActive(call: Call | null): boolean {
   const age = Date.now() - new Date(call.started_at).getTime()
   if (call.status === 'queued' && age > QUEUED_GRACE_MS) return false
   return age < ACTIVE_WINDOW_MS
+}
+
+/**
+ * isCallActive, re-checked when the clock ends it. A dry run, or a call Bolna never dialled, sends no
+ * more events, so nothing else would re-render the page once its time in "queued" is up.
+ */
+export function useCallActive(call: Call | null): boolean {
+  const [, recheck] = useReducer((n: number) => n + 1, 0)
+  const active = isCallActive(call)
+  useEffect(() => {
+    if (!active || !call) return
+    const limit = call.status === 'queued' ? QUEUED_GRACE_MS : ACTIVE_WINDOW_MS
+    const left = new Date(call.started_at).getTime() + limit - Date.now()
+    const id = window.setTimeout(recheck, left + 250)
+    return () => window.clearTimeout(id)
+  }, [active, call])
+  return active
 }
 
 type CohortDevice = {

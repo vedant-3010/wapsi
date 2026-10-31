@@ -9,7 +9,7 @@ import { KpiStrip } from '@/components/KpiStrip'
 import { QueuePanel } from '@/components/queue/QueuePanel'
 import { SoundboxCard } from '@/components/SoundboxCard'
 import { TopBar } from '@/components/TopBar'
-import { isCallActive, useDashboard } from '@/hooks/useDashboard'
+import { useCallActive, useDashboard } from '@/hooks/useDashboard'
 import { api } from '@/lib/api'
 import type { Handoff, RiskRow } from '@/lib/types'
 
@@ -37,7 +37,7 @@ export default function App() {
   }
 
   const nameOf = (merchantId: string) => dash.queue.find((r) => r.merchant_id === merchantId)?.name ?? merchantId
-  const callActive = isCallActive(dash.call)
+  const callActive = useCallActive(dash.call)
 
   return (
     <MotionConfig reducedMotion="user">

@@ -61,9 +61,13 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
     )
   }
 
-  const status = STATUS[call.status] ?? { label: call.status.replace(/-/g, ' '), tone: 'coral' as const }
-  const outcome = call.outcome ? OUTCOMES[call.outcome] : null
   const dryRun = call.bolna_execution_id?.startsWith('dry-')
+  // Still "queued" after the grace period: a dry run, or Bolna never dialled.
+  const status =
+    !active && call.status === 'queued'
+      ? { label: dryRun ? 'No call placed' : 'Not connected', tone: 'idle' as const }
+      : (STATUS[call.status] ?? { label: call.status.replace(/-/g, ' '), tone: 'coral' as const })
+  const outcome = call.outcome ? OUTCOMES[call.outcome] : null
   const speaking = active && call.status === 'in-progress'
   const ownerFirstName = call.merchants?.owner_name.split(' ')[0] ?? 'Merchant'
 
@@ -133,7 +137,11 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
               <span key={i} className="size-1.5 rounded-full bg-ink-3 animate-dot" style={{ animationDelay: `${i * 160}ms` }} />
             ))}
           </span>
-          {call.status === 'in-progress' ? `Wapsi is talking with ${ownerFirstName}` : 'Connecting the call'}
+          {call.status === 'in-progress'
+            ? `Wapsi is talking with ${ownerFirstName}`
+            : dryRun
+              ? 'Dry run: no phone rings'
+              : 'Connecting the call'}
         </motion.div>
       )}
       <div ref={end} />
