@@ -243,9 +243,10 @@ EXTRACTIONS: list[dict[str, Any]] = [
 def ensure_extractions(agent_id: str, headers: dict[str, str]) -> None:
     """Add the extractions this agent doesn't have yet (matched by category and name)."""
     listed = httpx.get(BOLNA_EXTRACTIONS_URL, headers=headers, params={"agent_id": agent_id}, timeout=30)
-    rows = listed.json() if listed.is_success else []
-    rows = rows.get("data", rows) if isinstance(rows, dict) else rows
-    have = {(r.get("category"), r.get("name")) for r in rows if isinstance(r, dict) and r.get("agent_id") == agent_id}
+    listed.raise_for_status()  # never add blindly: a failed listing would duplicate them
+    # {"agent_dispositions": [...this agent's...], "global_dispositions": [...]}
+    rows = listed.json().get("agent_dispositions") or []
+    have = {(r.get("category"), r.get("name")) for r in rows}
     for extraction in EXTRACTIONS:
         if (extraction["category"], extraction["name"]) in have:
             print(f"  extraction {extraction['category']} / {extraction['name']}: already there")
