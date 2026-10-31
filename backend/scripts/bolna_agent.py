@@ -116,7 +116,7 @@ TOOLS: dict[str, tuple[str, str, dict[str, Any], str, dict[str, str]]] = {
         "/api/tools/goodwill-credit",
         "Credit rent charged while the device was down, up to the cap, once a month.",
         {"amount": {"type": "integer", "description": "Rupees, whole number"}},
-        '{"merchant_id": "%(merchant_id)s", "amount": %(amount)i}',
+        '{"merchant_id": "%(merchant_id)s", "amount": "%(amount)s"}',  # quoted: the template must be valid JSON
         {"hi": "मैं देखता हूँ क्या कर सकते हैं।", "mr": "मी बघतो काय करता येईल."},
     ),
 }
@@ -124,12 +124,13 @@ TOOLS: dict[str, tuple[str, str, dict[str, Any], str, dict[str, str]]] = {
 
 def api_tools(backend: str, lang: str, tool_secret: str) -> dict[str, Any]:
     tools, params = [], {}
-    for name, (path, description, extra, param, pre_call) in TOOLS.items():
+    # Bolna's tool schema has no pre-call message; sending one (or a template that isn't JSON) stopped the
+    # agent from starting on real calls, so the messages stay in TOOLS for the dashboard editor only.
+    for name, (path, description, extra, param, _pre_call) in TOOLS.items():
         tools.append({
             "name": name,
             "key": "custom_task",
             "description": description,
-            "pre_call_message": pre_call[lang],
             "parameters": {"type": "object", "properties": {"merchant_id": MERCHANT_ID, **extra},
                            "required": ["merchant_id"]},
         })
