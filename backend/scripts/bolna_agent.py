@@ -168,6 +168,24 @@ def multilingual(lang: str, trigger: str) -> dict[str, Any]:
 
 def agent_body(backend: str, lang: str, env: dict[str, str], switch: str = "auto") -> dict[str, Any]:
     switching = switch in SWITCH_TRIGGERS
+    tools_config: dict[str, Any] = {
+        "llm_agent": {
+            "agent_type": "simple_llm_agent",
+            "agent_flow_type": "streaming",
+            "llm_config": {"provider": "openai", "model": "gpt-4.1-mini", "temperature": 0.2, "max_tokens": 150},
+        },
+        # The audio settings of Bolna's documented Plivo example, which carries audio on this account.
+        "synthesizer": {"provider": "sarvam", "provider_config": voice(lang), "stream": True, "buffer_size": 250,
+                        "audio_format": "wav"},
+        "transcriber": {"provider": "sarvam", "model": "saaras:v4", "language": lang, "stream": True,
+                        "encoding": "linear16", "sampling_rate": 8000, "endpointing": 400,
+                        "keywords": "Paytm,Soundbox,settlement,technician"},
+        "input": {"provider": "plivo", "format": "wav"},
+        "output": {"provider": "plivo", "format": "wav"},
+        "api_tools": api_tools(backend, lang, env["TOOL_SECRET"]),
+    }
+    if switching:  # only when on: an explicit null stopped the agent from starting on a real call
+        tools_config["multilingual_config"] = multilingual(lang, SWITCH_TRIGGERS[switch])
     return {
         "agent_config": {
             "agent_name": f"Wapsi ({LANGUAGE_NAMES[lang]})",
@@ -178,25 +196,8 @@ def agent_body(backend: str, lang: str, env: dict[str, str], switch: str = "auto
             # Bolna's copy ended a real call at 12:46 IST one second after it was answered.
             "tasks": [{
                 "task_type": "conversation",
-                "toolchain": {"execution": "parallel", "pipelines": [["transcriber", "llm", "synthesizer"]]},
-                "tools_config": {
-                    "llm_agent": {
-                        "agent_type": "simple_llm_agent",
-                        "agent_flow_type": "streaming",
-                        "llm_config": {"provider": "openai", "model": "gpt-4.1-mini", "temperature": 0.2,
-                                       "max_tokens": 150},
-                    },
-                    # Audio format and sampling rate are left to Bolna, which matches them to the phone line;
-                    # forcing them silenced a real call in both directions.
-                    "synthesizer": {"provider": "sarvam", "provider_config": voice(lang), "stream": True,
-                                    "buffer_size": 250},
-                    "transcriber": {"provider": "sarvam", "model": "saaras:v4", "language": lang, "stream": True,
-                                    "endpointing": 400, "keywords": "Paytm,Soundbox,settlement,technician"},
-                    "input": {"provider": "plivo", "format": "wav"},
-                    "output": {"provider": "plivo", "format": "wav"},
-                    "api_tools": api_tools(backend, lang, env["TOOL_SECRET"]),
-                    "multilingual_config": multilingual(lang, SWITCH_TRIGGERS[switch]) if switching else None,
-                },
+                "toolchain": {"execution": "sequential", "pipelines": [["transcriber", "llm", "synthesizer"]]},
+                "tools_config": tools_config,
                 "task_config": {"hangup_after_silence": 15, "call_terminate": 240, "voicemail": False,
                                 "check_if_user_online": True, "hangup_after_LLMCall": False},
             }],
