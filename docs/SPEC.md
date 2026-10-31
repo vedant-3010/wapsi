@@ -393,7 +393,7 @@ Configure in the Bolna dashboard (steps in `SETUP.md`). Variables in `{braces}` 
 **Welcome message** (one variable; the backend writes it in the merchant's language, with their first name)
 > {greeting}
 
-**Languages**: one agent can serve every merchant (`Speak {language_name}`). If Marathi needs its own transcriber/voice settings, create a second agent and set `BOLNA_AGENT_IDS=mr=<agent id>`; other languages keep `BOLNA_AGENT_ID`.
+**Languages**: the merchant can switch language mid-call. `backend/scripts/bolna_agent.py` gives every agent Bolna's `multilingual_config` with Hindi, Marathi and English: the call starts in the agent's language, and when the merchant speaks a full sentence in another one (or asks for it), Bolna moves the transcriber, the Sarvam voice (same speaker) and the prompt together and says one line ("ठीक आहे, आता मराठीत बोलूया."). Single borrowed words, numbers and OTPs don't switch it. Each language gets the prompt below with `Speak <language>.` and no switching rule (Bolna does the switching). Tool replies stay in English and the agent says them in the call's language; slot matching already understands Hindi, Marathi and English. The Marathi agent (`--lang mr`, `BOLNA_AGENT_IDS=mr=<agent id>`) only changes the starting language; other languages start on `BOLNA_AGENT_ID`. `--switch asked` switches only on request, `--switch off` pins one language (the fallback if a rehearsal call switches by mistake).
 
 **Prompt**
 ```

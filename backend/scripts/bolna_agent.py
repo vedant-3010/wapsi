@@ -6,6 +6,10 @@ and never prints them. From backend/:
     .venv/bin/python scripts/bolna_agent.py https://wapsi-backend.vercel.app --lang mr   # Marathi agent
     .venv/bin/python scripts/bolna_agent.py https://wapsi-backend.vercel.app --update <agent id>
 Prints the agent id: set it as BOLNA_AGENT_ID (Hindi) or BOLNA_AGENT_IDS=mr=<id> (Marathi) on Vercel.
+
+Every agent speaks Hindi, Marathi and English: it starts in --lang and Bolna follows the merchant mid-call,
+moving the transcriber, voice and prompt together. --switch asked switches only when the merchant asks for a
+language; --switch off pins the agent to --lang (the fallback if a rehearsal call switches by mistake).
 """
 
 import argparse
@@ -18,6 +22,17 @@ import httpx
 from dotenv import dotenv_values
 
 BOLNA_AGENT_URL = "https://api.bolna.ai/v2/agent"
+
+LANGUAGE_NAMES = {"hi": "Hindi", "mr": "Marathi", "en": "English"}  # the merchants' languages (0001_schema.sql)
+
+# Said once when the merchant moves into this language mid-call.
+SWITCHED = {
+    "hi": "ठीक है, अब हिंदी में बात करते हैं।",
+    "mr": "ठीक आहे, आता मराठीत बोलूया.",
+    "en": "Sure, let's continue in English.",
+}
+
+SWITCH_TRIGGERS = {"auto": "requested_or_auto_detected", "asked": "caller_requested"}
 
 PROMPT = """You are Wapsi, Paytm merchant support's AI assistant, calling about the merchant's Soundbox.
 Speak {language_name}; if they switch language, follow them. Short, simple sentences. One question at a time.
@@ -123,11 +138,40 @@ def api_tools(backend: str, lang: str, tool_secret: str) -> dict[str, Any]:
     return {"tools": tools, "tools_params": params}
 
 
-def agent_body(backend: str, lang: str, env: dict[str, str]) -> dict[str, Any]:
+def prompt_in(lang: str) -> str:
+    """The prompt while the call is in `lang`. Bolna does the switching, so the prompt carries no switching rule."""
+    name = LANGUAGE_NAMES[lang]
+    return PROMPT.replace("; if they switch language, follow them", "").replace("{language_name}", name)
+
+
+def voice(lang: str) -> dict[str, Any]:
+    """Sarvam Bulbul, one speaker in every language, so a switch keeps the same voice."""
+    return {"voice": "Shubh", "voice_id": "shubh", "model": "bulbul:v3", "language": lang, "speed": 1}
+
+
+def multilingual(lang: str, trigger: str) -> dict[str, Any]:
+    return {
+        "enabled": True,
+        "active_language": lang,
+        "language_switch_trigger": trigger,
+        "languages": {
+            code: {
+                "transcriber": {"language": code},
+                "synthesizer": {"provider": "sarvam", "provider_config": voice(code)},
+                "system_prompt": prompt_in(code),
+                "handoff_message": SWITCHED[code],
+            }
+            for code in LANGUAGE_NAMES
+        },
+    }
+
+
+def agent_body(backend: str, lang: str, env: dict[str, str], switch: str = "auto") -> dict[str, Any]:
     start, end = (int(part.split(":")[0]) for part in env.get("CALLING_HOURS", "09:00-21:00").split("-"))
+    switching = switch in SWITCH_TRIGGERS
     return {
         "agent_config": {
-            "agent_name": f"Wapsi ({'Marathi' if lang == 'mr' else 'Hindi'})",
+            "agent_name": f"Wapsi ({LANGUAGE_NAMES[lang]})",
             "agent_welcome_message": "{greeting}",
             "webhook_url": f"{backend}/api/bolna/webhook?token={env['WEBHOOK_SECRET']}",
             "call_summary_enabled": True,
@@ -143,9 +187,7 @@ def agent_body(backend: str, lang: str, env: dict[str, str]) -> dict[str, Any]:
                                        "max_tokens": 150},
                     },
                     "synthesizer": {
-                        "provider": "sarvam",
-                        "provider_config": {"voice": "Shubh", "voice_id": "shubh", "model": "bulbul:v3",
-                                            "language": lang, "speed": 1},
+                        "provider": "sarvam", "provider_config": voice(lang),
                         "stream": True, "buffer_size": 250, "audio_format": "wav",
                     },
                     "transcriber": {"provider": "sarvam", "model": "saaras:v4", "language": lang, "stream": True,
@@ -154,19 +196,22 @@ def agent_body(backend: str, lang: str, env: dict[str, str]) -> dict[str, Any]:
                     "input": {"provider": "plivo", "format": "wav"},
                     "output": {"provider": "plivo", "format": "wav"},
                     "api_tools": api_tools(backend, lang, env["TOOL_SECRET"]),
+                    "multilingual_config": multilingual(lang, SWITCH_TRIGGERS[switch]) if switching else None,
                 },
                 "task_config": {"hangup_after_silence": 15, "call_terminate": 240, "voicemail": True,
                                 "check_if_user_online": True, "hangup_after_LLMCall": False},
             }],
         },
-        "agent_prompts": {"task_1": {"system_prompt": PROMPT}},
+        "agent_prompts": {"task_1": {"system_prompt": prompt_in(lang) if switching else PROMPT}},
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("backend", help="public backend URL, e.g. https://wapsi-backend.vercel.app")
-    parser.add_argument("--lang", choices=["hi", "mr"], default="hi")
+    parser.add_argument("--lang", choices=["hi", "mr"], default="hi", help="the language a call starts in")
+    parser.add_argument("--switch", choices=[*SWITCH_TRIGGERS, "off"], default="auto",
+                        help="follow the merchant's language mid-call: auto-detected or asked (default auto)")
     parser.add_argument("--update", metavar="AGENT_ID", help="update this agent instead of creating one")
     parser.add_argument("--env-file", default=".env.production")
     args = parser.parse_args()
@@ -176,7 +221,7 @@ def main() -> None:
     if missing:
         sys.exit(f"Missing {', '.join(missing)} in {args.env_file} or the environment")
 
-    body = agent_body(args.backend.rstrip("/"), args.lang, env)
+    body = agent_body(args.backend.rstrip("/"), args.lang, env, args.switch)
     headers = {"Authorization": f"Bearer {env['BOLNA_API_KEY']}"}
     if args.update:
         response = httpx.put(f"{BOLNA_AGENT_URL}/{args.update}", headers=headers, json=body, timeout=30)
@@ -189,7 +234,7 @@ def main() -> None:
     if response.is_error:
         sys.exit(f"Bolna HTTP {response.status_code}: {text[:500]}")
     data = json.loads(text)
-    print(f"{data.get('state', 'updated')}: agent {data.get('agent_id', args.update)} ({args.lang})")
+    print(f"{data.get('state', 'updated')}: agent {data.get('agent_id', args.update)} ({args.lang}, switch {args.switch})")
 
 
 if __name__ == "__main__":
