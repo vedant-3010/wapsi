@@ -167,7 +167,6 @@ def multilingual(lang: str, trigger: str) -> dict[str, Any]:
 
 
 def agent_body(backend: str, lang: str, env: dict[str, str], switch: str = "auto") -> dict[str, Any]:
-    start, end = (int(part.split(":")[0]) for part in env.get("CALLING_HOURS", "09:00-21:00").split("-"))
     switching = switch in SWITCH_TRIGGERS
     return {
         "agent_config": {
@@ -175,7 +174,8 @@ def agent_body(backend: str, lang: str, env: dict[str, str], switch: str = "auto
             "agent_welcome_message": "{greeting}",
             "webhook_url": f"{backend}/api/bolna/webhook?token={env['WEBHOOK_SECRET']}",
             "call_summary_enabled": True,
-            "calling_guardrails": {"call_start_hour": start, "call_end_hour": min(end, 23)},
+            # No calling_guardrails here: the backend enforces CALLING_HOURS before it places a call, and
+            # Bolna's copy ended a real call at 12:46 IST one second after it was answered.
             "tasks": [{
                 "task_type": "conversation",
                 "toolchain": {"execution": "parallel", "pipelines": [["transcriber", "llm", "synthesizer"]]},
