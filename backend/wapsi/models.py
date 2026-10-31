@@ -1,6 +1,6 @@
 """Request and response bodies (SPEC §7)."""
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -104,6 +104,8 @@ class BolnaExecution(BaseModel):
     total_cost: float | None = None
     transcript: str | None = None
     summary: str | None = None
+    # Post-call extractions: {category: {name: {"objective", "subjective", "confidence", ...}}}
+    extracted_data: dict[str, Any] | None = None
 
 
 class WebhookResponse(BaseModel):

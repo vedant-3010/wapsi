@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     call_dry_run: bool = True  # safe default: never place a real call unless told to
     goodwill_cap: int = 100
     holdout_recovery_rate: float = 0.1
+    # The test alert Wapsi sends to a Soundbox mid-call (₹), and when a missed call is tried again.
+    test_alert_amount: int = 1
+    retry_after_minutes: int = 120
+    max_retries: int = 2  # a day, per merchant
     # Technician windows the mocked field-service system offers for tomorrow (IST).
     technician_slots: Annotated[list[str], NoDecode] = ["11 AM to 1 PM", "3 PM to 5 PM"]
     cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]

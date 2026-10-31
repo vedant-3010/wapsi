@@ -13,6 +13,8 @@ export type Dashboard = {
   device: Device | null
   handoffs: Handoff[]
   series: Record<string, number[]>
+  /** Missed merchants Wapsi will call again: merchant_id → retry time (F18). */
+  retries: Record<string, string>
   kpis: Kpis
   loaded: boolean
   error: string | null
@@ -38,6 +40,7 @@ const EMPTY: Dashboard = {
   device: null,
   handoffs: [],
   series: {},
+  retries: {},
   kpis: EMPTY_KPIS,
   loaded: false,
   error: null,
@@ -74,6 +77,21 @@ export function useCallActive(call: Call | null): boolean {
     return () => window.clearTimeout(id)
   }, [active, call])
   return active
+}
+
+type FollowUp = { merchant_id: string; type: string; payload: Record<string, unknown> | null }
+
+/** A merchant's latest retry counts only if no call has started since (rows come newest first). */
+function pendingRetries(rows: FollowUp[]): Record<string, string> {
+  const seen = new Set<string>()
+  const retries: Record<string, string> = {}
+  for (const row of rows) {
+    if (seen.has(row.merchant_id)) continue
+    seen.add(row.merchant_id)
+    const at = row.payload?.retry_at
+    if (row.type === 'retry_scheduled' && typeof at === 'string') retries[row.merchant_id] = at
+  }
+  return retries
 }
 
 type CohortDevice = {
@@ -124,7 +142,7 @@ export function useDashboard() {
   const timer = useRef<number | undefined>(undefined)
 
   const load = useCallback(async () => {
-    const [queue, calls, handoffs, cohortDevices, costs, today] = await Promise.all([
+    const [queue, calls, handoffs, cohortDevices, costs, today, followUps] = await Promise.all([
       supabase.from('risk_queue').select('*').order('risk_score', { ascending: false })
         .order('days_silent', { ascending: false }),
       supabase.from('calls').select(CALL_COLUMNS).order('started_at', { ascending: false }).limit(1),
@@ -134,8 +152,10 @@ export function useDashboard() {
         .not('at_risk_since', 'is', null),
       supabase.from('calls').select('cost_cents, device_id'),
       supabase.from('calls').select('id', { count: 'exact', head: true }).gte('started_at', startOfTodayIst()),
+      supabase.from('actions').select('merchant_id, type, payload').in('type', ['retry_scheduled', 'call_started'])
+        .order('created_at', { ascending: false }).limit(200),
     ])
-    const failed = [queue, calls, handoffs, cohortDevices, costs, today].find((r) => r.error)
+    const failed = [queue, calls, handoffs, cohortDevices, costs, today, followUps].find((r) => r.error)
     if (failed?.error) {
       console.error('Supabase read failed', failed.error)
       setData((prev) => ({ ...prev, loaded: true, error: failed.error.message }))
@@ -171,6 +191,7 @@ export function useDashboard() {
       device: ((devices.data as Device[] | null) ?? [])[0] ?? null,
       handoffs: handoffRows,
       series: Object.fromEntries(((volumes.data as VolumeSeries[] | null) ?? []).map((v) => [v.device_id, v.txns])),
+      retries: pendingRetries((followUps.data as FollowUp[] | null) ?? []),
       kpis: computeKpis(queueRows, today.count ?? 0, (cohortDevices.data as CohortDevice[] | null) ?? [],
         costs.data ?? [], handoffRows.length),
       loaded: true,

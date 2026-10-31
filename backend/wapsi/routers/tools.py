@@ -222,6 +222,24 @@ def restart_device(
     return ToolResponse(result=result)
 
 
+@router.post("/test-soundbox")
+def test_soundbox(
+    body: ToolRequest,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> ToolResponse:
+    """F17: a test alert over the Soundbox's 4G link. A test is not a payment: no device state changes."""
+    ctx = _context(db, body.merchant_id)
+    fault = ctx.device["fault"]
+    amount = settings.test_alert_amount
+    result, detail = messages.soundbox_test(fault, amount)
+    delivered = fault not in ("no_network", "frozen")
+    _log(db, ctx, "soundbox_tested", detail,
+         {"amount": amount, "delivered": delivered, "spoke": delivered and fault != "speaker_fault", "fault": fault})
+    return ToolResponse(result=result, next=messages.next_after_test(
+        fault, ctx.device["status"], messages.slot_options(settings.technician_slots)))
+
+
 @router.post("/goodwill-credit")
 def goodwill_credit(
     body: GoodwillCreditRequest,

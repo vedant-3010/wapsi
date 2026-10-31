@@ -120,6 +120,10 @@ ESCALATIONS = {
     "fixes_failed": Escalation("fixes failed", "Send technician with replacement device", "two fixes did not work",
                                "A senior colleague will call you back today to send a replacement device."),
 }
+# Raised by Wapsi itself after the call, from Bolna's mood extraction (wapsi/followups.py).
+MOOD_REASON = "upset_on_call"
+ESCALATIONS[MOOD_REASON] = Escalation("upset on the call", "Senior courtesy callback today",
+                                      "Wapsi heard frustration on the call", _CALLBACK_TODAY)
 # Unknown or missing reason from the LLM: still hand off, never fail.
 FALLBACK_ESCALATION = Escalation("needs a human", "Senior callback today", "the agent could not resolve it",
                                  _CALLBACK_TODAY)
@@ -144,6 +148,25 @@ def restarted(fault: str) -> tuple[str, str]:
     return (
         "Restart done. The device was already working.",
         "Restart: device was already healthy → no change (nothing to fix remotely)",
+    )
+
+
+def soundbox_test(fault: str, amount: int) -> tuple[str, str]:
+    """A test alert sent to the Soundbox over its 4G link: the merchant hears the fix work, or not."""
+    if fault in ("no_network", "frozen"):
+        return (
+            "The test alert couldn't reach your Soundbox because it is offline. Let me restart it first.",
+            "Test alert: not delivered → restart first (the device is offline)",
+        )
+    if fault == "speaker_fault":
+        return (
+            "The test alert reached your Soundbox, but the speaker stayed silent. The technician visit will fix that.",
+            "Test alert: delivered, speaker silent → technician visit stands (the hardware fault is confirmed)",
+        )
+    rupees = "rupee" if amount == 1 else "rupees"
+    return (
+        f"I've sent a test alert. Your Soundbox should say {amount} {rupees} received right now.",
+        f"Test alert: sent over 4G → Soundbox announced {format_inr(amount)} (the merchant hears the fix work)",
     )
 
 
@@ -182,7 +205,18 @@ def offer_slots(slot_options: str) -> str:
 
 
 AFTER_BOOKING = "Tell them the visit time, then ask if anything else is wrong."
-AFTER_RESTART = "Call run_diagnostics again to confirm the fix."
+AFTER_RESTART = "Call test_soundbox so they hear the Soundbox work, then ask if they heard it."
+
+
+def next_after_test(fault: str, status: str, slot_options: str) -> str:
+    if fault in ("no_network", "frozen"):
+        return "Call restart_device now, then test_soundbox again."
+    if fault == "speaker_fault":
+        if status == "fix_scheduled":
+            return "Tell them the technician visit will fix the speaker, then ask if anything else is wrong."
+        return offer_slots(slot_options)
+    return ("Ask if they heard the Soundbox. If yes, tell them it works and close the call."
+            " If not, call escalate_to_human with reason fixes_failed.")
 AFTER_ESCALATION = "Say the result as it is, thank them and close the call."
 AFTER_CREDIT_REFUSED = "Call escalate_to_human with reason above_cap."
 
@@ -270,6 +304,54 @@ def technician_visited(name: str, fault: str) -> str:
 
 def payments_resumed(name: str, txns: int) -> str:
     return f"Payments resumed at {name}: {txns} today, back to normal → verified save"
+
+
+def calling_back(missed_at: str) -> str:
+    """The run's reason when it calls back a missed merchant before the queue (F18)."""
+    return f"Calling back after a missed call at {missed_at}"
+
+
+# The missed-call message, in the merchant's language (sent on WhatsApp; mocked in the demo).
+_WHATSAPP = {
+    "hi": "नमस्ते {name} जी, Paytm merchant support से Wapsi ने आपके Soundbox के बारे में कॉल किया था। हम {when} फिर कॉल करेंगे।",
+    "mr": "नमस्कार {name} जी, Paytm merchant support कडून Wapsi ने तुमच्या Soundbox बद्दल कॉल केला होता. आम्ही {when} पुन्हा कॉल करू.",
+    "en": "Hello {name}, Wapsi from Paytm merchant support called about your Soundbox. We'll call again {when}.",
+}
+_WHEN = {
+    "hi": {"today": "आज {time}", "tomorrow": "कल {time}"},
+    "mr": {"today": "आज {time}", "tomorrow": "उद्या {time}"},
+    "en": {"today": "today at {time}", "tomorrow": "tomorrow at {time}"},
+}
+
+
+def whatsapp_message(language: str, first_name: str, day: str, time: str) -> str:
+    lang = language if language in _WHATSAPP else "hi"
+    return _WHATSAPP[lang].format(name=first_name, when=_WHEN[lang][day].format(time=time))
+
+
+def whatsapp_sent(language: str) -> str:
+    return (f"WhatsApp: missed call → message sent in {LANGUAGE_NAMES.get(language, 'Hindi')}"
+            " (so the merchant knows why we called)")
+
+
+def retry_scheduled(day: str, time: str, same_window: bool, retry_after_minutes: int) -> str:
+    hours = retry_after_minutes / 60
+    gap = f"{hours:g} hour{'s' if hours != 1 else ''} later" if hours >= 1 else f"{retry_after_minutes} minutes later"
+    why = f"{gap}, inside calling hours" if same_window else "the first slot of the next calling window"
+    return f"Retry: no answer → calling again {_WHEN['en'][day].format(time=time)} ({why})"
+
+
+def retry_limit(tries: int) -> str:
+    return f"Retry: no answer {tries} times → no more calls today ({tries - 1} retries is the daily limit)"
+
+
+_MOODS = {"calm": "calm", "confused": "confused", "upset": "upset", "angry": "angry"}
+
+
+def mood_detected(mood: str, flagged: bool) -> str:
+    if flagged:
+        return f"Mood: {_MOODS[mood]} → senior courtesy callback (an upset merchant gets a person, not just a fix)"
+    return f"Mood: {_MOODS[mood]} → no follow-up needed (the merchant wasn't upset)"
 
 
 def human_takeover(name: str, escalation: Escalation, next_step: str | None) -> str:

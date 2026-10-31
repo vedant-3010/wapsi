@@ -1,4 +1,4 @@
-import { BadgeCheck, Clock, type LucideIcon, Maximize2, MonitorPlay, UsersRound, Volume2, VolumeX, Wrench } from 'lucide-react'
+import { BadgeCheck, BellRing, Clock, type LucideIcon, Maximize2, MonitorPlay, UsersRound, Volume2, VolumeX, Wrench } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 
@@ -92,6 +92,8 @@ function Device({ look, ding, days }: { look: Look; ding: { amount: number; at: 
   )
 }
 
+type Ding = 'payment' | 'test' | 'muted'
+
 type SoundboxCardProps = {
   device: Device | null
   feed: Action[]
@@ -113,7 +115,8 @@ export function SoundboxCard({
   const announce = useAnnouncer()
   // Keyed by id + created_at: a demo reset restarts action ids at 1, so ids alone repeat.
   const seen = useRef<Set<string> | null>(null)
-  const [ding, setDing] = useState<{ deviceId: string; amount: number; at: number } | null>(null)
+  // A payment, a test alert it spoke (F17), or a test alert it got but couldn't speak (speaker fault).
+  const [ding, setDing] = useState<{ deviceId: string; amount: number; at: number; kind: Ding } | null>(null)
   const [webgl] = useState(hasWebGL)
   const [stage, setStage] = useState(false)
   const language: Language = device?.merchants?.language ?? nextUp?.language ?? 'hi'
@@ -126,12 +129,17 @@ export function SoundboxCard({
       return
     }
     const known = seen.current
-    const paid = feed.find((a) => !known.has(key(a)) && a.type === 'payments_resumed' && a.device_id === device?.id)
+    const event = feed.find(
+      (a) =>
+        !known.has(key(a)) && a.device_id === device?.id &&
+        (a.type === 'payments_resumed' || (a.type === 'soundbox_tested' && a.payload?.delivered === true)),
+    )
     feed.forEach((a) => known.add(key(a)))
-    if (paid && device) {
-      const amount = paymentAmount(paid)
-      announce(amount, language)
-      setDing({ deviceId: device.id, amount, at: Date.now() })
+    if (event && device) {
+      const amount = paymentAmount(event)
+      const kind: Ding = event.type === 'payments_resumed' ? 'payment' : event.payload?.spoke ? 'test' : 'muted'
+      if (kind !== 'muted') announce(amount, language)
+      setDing({ deviceId: device.id, amount, at: Date.now(), kind })
     }
   }, [feed, loaded, device, language, announce])
 
@@ -179,21 +187,23 @@ export function SoundboxCard({
     if (!lastPaid || !device) return
     const amount = paymentAmount(lastPaid)
     announce(amount, language)
-    setDing({ deviceId: device.id, amount, at: Date.now() })
+    setDing({ deviceId: device.id, amount, at: Date.now(), kind: 'payment' })
   }
+  // What the device itself does: it rings and speaks only if the sound actually played.
+  const sounding = live && live.kind !== 'muted' ? live : null
 
   const model = (variant: 'card' | 'stage') =>
     webgl ? (
       <Suspense
         fallback={
           <div className="grid h-full place-items-center">
-            <Device look={look} ding={live} days={subject.days} />
+            <Device look={look} ding={sounding} days={subject.days} />
           </div>
         }
       >
         <SoundboxModel
           status={subject.status}
-          ding={live}
+          ding={sounding}
           upiId={upiId}
           language={language}
           variant={variant}
@@ -202,7 +212,7 @@ export function SoundboxCard({
       </Suspense>
     ) : (
       <div className="grid h-full place-items-center">
-        <Device look={look} ding={live} days={subject.days} />
+        <Device look={look} ding={sounding} days={subject.days} />
       </div>
     )
 
@@ -210,15 +220,19 @@ export function SoundboxCard({
     <AnimatePresence mode="wait" initial={false}>
       {live ? (
         <motion.span
-          key="paid"
+          key={`${live.kind}-${live.at}`}
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           transition={SPRING_POP}
-          className={cn('tag shrink-0 text-[14px]', TAG.sage)}
+          className={cn('tag shrink-0 text-[14px]', TAG[live.kind === 'payment' ? 'sage' : live.kind === 'test' ? 'sky' : 'amber'])}
         >
-          <Volume2 className="size-3.5" />
-          {live.amount ? `${formatRupees(live.amount)} received` : 'Payment received'}
+          {live.kind === 'muted' ? <VolumeX className="size-3.5" /> : live.kind === 'test' ? <BellRing className="size-3.5" /> : <Volume2 className="size-3.5" />}
+          {live.kind === 'payment'
+            ? live.amount ? `${formatRupees(live.amount)} received` : 'Payment received'
+            : live.kind === 'test'
+              ? `Test alert · ${formatRupees(live.amount)}`
+              : 'Test alert · speaker silent'}
         </motion.span>
       ) : (
         <motion.span
@@ -240,7 +254,7 @@ export function SoundboxCard({
       open={stage}
       onOpenChange={setStage}
       model={stage && model('stage')}
-      confetti={live && stage && <Confetti key={live.at} />}
+      confetti={live?.kind === 'payment' && stage && <Confetti key={live.at} />}
       deviceId={subject.id}
       name={subject.name}
       subtitle={subject.subtitle}
@@ -313,7 +327,7 @@ export function SoundboxCard({
     >
       <div className="relative -mx-6 -mt-1 h-[300px]" onDoubleClick={() => setStage(true)}>
         {!stage && model('card')}
-        {live && !stage && <Confetti key={live.at} />}
+        {live?.kind === 'payment' && !stage && <Confetti key={live.at} />}
         {webgl && (
           <span className="pointer-events-none absolute right-6 bottom-1 text-[12px] text-ink-4">Drag to turn · double-click for the demo stage</span>
         )}

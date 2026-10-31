@@ -35,6 +35,13 @@ const OUTCOMES: Record<string, { label: string; tone: Tone }> = {
   no_answer: { label: 'No answer', tone: 'coral' },
 }
 
+const MOODS: Record<string, { label: string; tone: Tone }> = {
+  calm: { label: 'Calm', tone: 'sage' },
+  confused: { label: 'Confused', tone: 'amber' },
+  upset: { label: 'Upset', tone: 'coral' },
+  angry: { label: 'Angry', tone: 'coral' },
+}
+
 /** +91 98765 43210 → "phone ending 3210" (the full number never goes on screen). */
 function maskPhone(phone: string) {
   const digits = phone.replace(/\D/g, '')
@@ -68,6 +75,9 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
       ? { label: dryRun ? 'No call placed' : 'Not connected', tone: 'idle' as const }
       : (STATUS[call.status] ?? { label: call.status.replace(/-/g, ' '), tone: 'coral' as const })
   const outcome = call.outcome ? OUTCOMES[call.outcome] : null
+  // Bolna's post-call mood extraction, as the backend logged it (F19).
+  const moodValue = feed.find((a) => a.type === 'mood_detected' && a.call_id === call.id)?.payload?.mood
+  const mood = typeof moodValue === 'string' ? MOODS[moodValue] : undefined
   const speaking = active && call.status === 'in-progress'
   const ownerFirstName = call.merchants?.owner_name.split(' ')[0] ?? 'Merchant'
 
@@ -118,6 +128,15 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
             className={cn('tag mt-3', TAG[outcome.tone])}
           >
             Outcome · {outcome.label}
+          </motion.span>
+        )}
+        {mood && (
+          <motion.span
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={cn('tag mt-3', outcome && 'ml-2', TAG[mood.tone])}
+          >
+            Mood · {mood.label}
           </motion.span>
         )}
       </motion.div>

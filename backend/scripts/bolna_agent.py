@@ -52,7 +52,7 @@ Flow:
    time exactly as written. Most replies also have "next": do what it says. Never read "next" aloud.
 4. Fix based on the diagnosis:
    - Speaker fault: offer only these slots: {slot_options}. Call book_technician with the one they pick.
-   - No signal or frozen: call restart_device, then run_diagnostics again.
+   - No signal or frozen: call restart_device, then test_soundbox so they hear it work.
    - They doubt their settlement: call resend_settlement.
    - Upset about rent paid while the device was down: call apply_goodwill_credit, {goodwill_cap} or less, once.
 5. Call escalate_to_human when: they ask for a person; still angry after one attempt to calm them;
@@ -105,6 +105,13 @@ TOOLS: dict[str, tuple[str, str, dict[str, Any], str, dict[str, str]]] = {
         },
         '{"merchant_id": "%(merchant_id)s", "reason": "%(reason)s", "summary": "%(summary)s"}',
         {"hi": "मैं आपको अपने senior से जोड़ रहा हूँ।", "mr": "मी तुम्हाला माझ्या senior शी जोडतोय."},
+    ),
+    "test_soundbox": (
+        "/api/tools/test-soundbox",
+        "Send a test alert to the merchant's Soundbox over its 4G link, so they hear whether it speaks."
+        " Call it after restart_device fixes the device.",
+        {}, '{"merchant_id": "%(merchant_id)s"}',
+        {"hi": "मैं आपके Soundbox पर एक टेस्ट अलर्ट भेज रहा हूँ।", "mr": "मी तुमच्या Soundbox वर एक टेस्ट अलर्ट पाठवतोय."},
     ),
     "restart_device": (
         "/api/tools/restart-device",
@@ -207,6 +214,46 @@ def agent_body(backend: str, lang: str, env: dict[str, str], switch: str = "auto
     }
 
 
+BOLNA_EXTRACTIONS_URL = "https://api.bolna.ai/dispositions/"
+
+# Post-call extractions (Bolna calls one a "disposition"). Results come back in the webhook's
+# extracted_data[category][name]; wapsi/followups.py reads them under these same names.
+EXTRACTIONS: list[dict[str, Any]] = [
+    {
+        "name": "Mood", "category": "Merchant",
+        "question": "How did the merchant sound by the end of the call? Judge their words and tone across the"
+                    " whole call, not the agent's.",
+        "is_objective": True, "is_subjective": False, "subjective_type": "text",
+        "objective_options": [
+            {"value": "calm", "condition": "Polite or neutral, cooperative throughout."},
+            {"value": "confused", "condition": "Unsure what is happening or what to do, but not annoyed."},
+            {"value": "upset", "condition": "Annoyed or frustrated: complains, or says they lost money or time."},
+            {"value": "angry", "condition": "Openly angry or hostile: shouting, threats to leave Paytm, abuse."},
+        ],
+    },
+    {
+        "name": "Mood reason", "category": "Merchant",
+        "question": "In one short English sentence, what made the merchant feel that way? Leave out phone,"
+                    " account and card numbers.",
+        "is_objective": False, "is_subjective": True, "subjective_type": "text",
+    },
+]
+
+
+def ensure_extractions(agent_id: str, headers: dict[str, str]) -> None:
+    """Add the extractions this agent doesn't have yet (matched by category and name)."""
+    listed = httpx.get(BOLNA_EXTRACTIONS_URL, headers=headers, params={"agent_id": agent_id}, timeout=30)
+    rows = listed.json() if listed.is_success else []
+    rows = rows.get("data", rows) if isinstance(rows, dict) else rows
+    have = {(r.get("category"), r.get("name")) for r in rows if isinstance(r, dict) and r.get("agent_id") == agent_id}
+    for extraction in EXTRACTIONS:
+        if (extraction["category"], extraction["name"]) in have:
+            print(f"  extraction {extraction['category']} / {extraction['name']}: already there")
+            continue
+        response = httpx.post(BOLNA_EXTRACTIONS_URL, headers=headers, json={"agent_id": agent_id, **extraction}, timeout=30)
+        print(f"  extraction {extraction['category']} / {extraction['name']}: HTTP {response.status_code}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("backend", help="public backend URL, e.g. https://wapsi-backend.vercel.app")
@@ -214,6 +261,7 @@ def main() -> None:
     parser.add_argument("--switch", choices=[*SWITCH_TRIGGERS, "off"], default="auto",
                         help="follow the merchant's language mid-call: auto-detected or asked (default auto)")
     parser.add_argument("--update", metavar="AGENT_ID", help="update this agent instead of creating one")
+    parser.add_argument("--extractions", action="store_true", help="also add the mood extractions to the agent")
     parser.add_argument("--env-file", default=".env.production")
     args = parser.parse_args()
 
@@ -235,7 +283,10 @@ def main() -> None:
     if response.is_error:
         sys.exit(f"Bolna HTTP {response.status_code}: {text[:500]}")
     data = json.loads(text)
-    print(f"{data.get('state', 'updated')}: agent {data.get('agent_id', args.update)} ({args.lang}, switch {args.switch})")
+    agent_id = data.get("agent_id", args.update)
+    print(f"{data.get('state', 'updated')}: agent {agent_id} ({args.lang}, switch {args.switch})")
+    if args.extractions:
+        ensure_extractions(agent_id, headers)
 
 
 if __name__ == "__main__":

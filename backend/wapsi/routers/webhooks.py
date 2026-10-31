@@ -2,12 +2,13 @@
 
 import hmac
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from supabase import Client
 
-from wapsi import messages
+from wapsi import followups, messages
 from wapsi.actions import log_action, set_outcome
 from wapsi.config import Settings, get_settings
 from wapsi.context import TERMINAL_STATUSES
@@ -57,10 +58,25 @@ def bolna_webhook(
             .eq("id", call["id"]).is_("ended_at", "null").execute()
         )
         if ended.data:
-            if not body.conversation_duration:
+            missed = not body.conversation_duration
+            if missed:
                 set_outcome(db, call, "no_answer", only_if_empty=True)
             log_action(db, merchant_id=call["merchant_id"], device_id=call.get("device_id"), call_id=call["id"],
                        actor="system", type="call_ended",
                        detail=messages.call_ended(body.status or "", body.conversation_duration, call.get("outcome")),
                        payload={"status": body.status, "duration_s": values.get("duration_s")})
+            if missed and body.status in followups.MISSED_STATUSES:
+                _safely(followups.on_missed_call, db, settings, call)
+
+    # Extractions can arrive with any delivery, often after "completed"; on_extractions acts once per call.
+    if body.extracted_data:
+        _safely(followups.on_extractions, db, call, body.extracted_data)
     return WebhookResponse(matched=True)
+
+
+def _safely(step: Callable[..., None], *args: Any) -> None:
+    """A follow-up must never fail the webhook: Bolna would only resend what's already saved."""
+    try:
+        step(*args)
+    except Exception:
+        logger.exception("Follow-up %s failed", step.__name__)

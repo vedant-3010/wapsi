@@ -70,6 +70,7 @@ export default function App() {
             queue={dash.queue}
             series={dash.series}
             onCallMerchantId={callActive ? (dash.call?.merchant_id ?? null) : null}
+            retries={dash.retries}
             className="max-h-[75svh] lg:max-h-none"
             onCall={(row: RiskRow, phone: string) =>
               act('call', () => api.startCall(row.merchant_id, phone || undefined), () => `Calling ${row.name}`)

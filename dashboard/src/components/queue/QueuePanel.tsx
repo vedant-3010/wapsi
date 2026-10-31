@@ -20,6 +20,7 @@ type QueuePanelProps = {
   queue: RiskRow[]
   series: Record<string, number[]>
   onCallMerchantId: string | null
+  retries: Record<string, string>
   className?: string
   onCall: (row: RiskRow, phone: string) => Promise<boolean>
 }
@@ -51,7 +52,7 @@ function Segmented({ value, counts, onChange }: { value: Filter; counts: Record<
 }
 
 // F1. Sorted by risk score, then days silent. A row opens the merchant; Call is the backup to the run.
-export function QueuePanel({ queue, series, onCallMerchantId, className, onCall }: QueuePanelProps) {
+export function QueuePanel({ queue, series, onCallMerchantId, retries, className, onCall }: QueuePanelProps) {
   const [filter, setFilter] = useState<Filter>('all')
   const [target, setTarget] = useState<RiskRow | null>(null)
   const [open, setOpen] = useState<RiskRow | null>(null)
@@ -85,6 +86,7 @@ export function QueuePanel({ queue, series, onCallMerchantId, className, onCall 
                 index={i}
                 series={series[row.device_id]}
                 onCall={row.merchant_id === onCallMerchantId}
+                retryAt={retries[row.merchant_id]}
                 onOpen={() => setOpen(row)}
                 onCallClick={() => setTarget(row)}
               />

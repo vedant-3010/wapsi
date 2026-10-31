@@ -3,11 +3,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 
-from wapsi import calling
+from wapsi import calling, followups, messages
 from wapsi.config import Settings, get_settings
 from wapsi.context import active_call, get_merchant
 from wapsi.db import first, get_db
 from wapsi.models import StartRunRequest, StartRunResponse
+from wapsi.util import format_clock, parse_ts
 
 router = APIRouter()
 
@@ -24,12 +25,18 @@ def start_run(
         name = merchant["name"] if merchant else busy["merchant_id"]
         raise HTTPException(status_code=409, detail=f"Wapsi is already on a call with {name}")
 
-    top = first(
-        db.table("risk_queue").select("*")
-        .eq("cohort", "wapsi").eq("status", "at_risk")
-        .order("risk_score", desc=True).order("days_silent", desc=True)
-        .limit(1).execute()
-    )
+    # A missed merchant whose retry time has come goes first (F18); otherwise the top of the queue.
+    retry = followups.due_retry(db)
+    if retry is not None:
+        row, action = retry
+        top = {**row, "reason": messages.calling_back(format_clock(parse_ts(action["created_at"])))}
+    else:
+        top = first(
+            db.table("risk_queue").select("*")
+            .eq("cohort", "wapsi").eq("status", "at_risk")
+            .order("risk_score", desc=True).order("days_silent", desc=True)
+            .limit(1).execute()
+        )
     if top is None:
         raise HTTPException(status_code=404, detail="No at-risk merchant left to call")
 

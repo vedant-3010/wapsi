@@ -48,6 +48,12 @@ def format_inr(amount: int) -> str:
     return ("-" if amount < 0 else "") + "₹" + ",".join([*groups, tail])
 
 
+def format_clock(value: datetime) -> str:
+    """4:30 PM, in IST."""
+    local = value.astimezone(IST)
+    return f"{local.hour % 12 or 12}:{local.minute:02d} {'AM' if local.hour < 12 else 'PM'}"
+
+
 def format_day(value: date | str) -> str:
     """26 Oct."""
     day = date.fromisoformat(value) if isinstance(value, str) else value

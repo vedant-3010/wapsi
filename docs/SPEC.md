@@ -53,6 +53,9 @@ Paytm's device, settlement, field-service and billing systems are not public. We
 | F13 | **`apply_goodwill_credit` tool**, cap ₹100; above cap → refused, agent escalates | M004 credit applied; ₹500 request refused |
 | F14 | **Marathi**: per-merchant language; M002 and M004 calls in Marathi | One Marathi call works end to end |
 | F15 | **Visible guardrails**: Safety strip from `GET /api/config` (allowlist size, calling hours and whether they're open now, credit cap, dry run or real calls); every action tagged agent/human/system | Visible on dashboard |
+| F17 | **Test alert**: `test_soundbox` tool sends a ₹`TEST_ALERT_AMOUNT` test alert over the Soundbox's 4G link (the channel payment alerts use); the virtual Soundbox speaks it, or shows "speaker silent" on a speaker fault; offline → restart first. A test never changes device state or counts as a payment | After a restart, the merchant hears the Soundbox on the call |
+| F18 | **Missed-call follow-up**: no answer/busy/failed (or 0 s) → WhatsApp message in the merchant's language (mocked) + retry `RETRY_AFTER_MINUTES` later inside `CALLING_HOURS`, at most `MAX_RETRIES` a day; the next **Start Wapsi's run** calls a due retry before the queue; the queue row shows "Retry 4:30 pm" | A missed call shows WhatsApp + Retry steps and a chip |
+| F19 | **Mood**: Bolna post-call extractions (category `Merchant`: `Mood` = calm/confused/upset/angry, `Mood reason`) arrive in the webhook's `extracted_data`; upset/angry with confidence ≥ 0.6 → Wapsi opens a handoff `upset_on_call` ("Senior courtesy callback today"), once per call; the call card shows "Mood · Upset" | An upset merchant lands in the Handoff queue on their own |
 
 ### P2 — stretch (only if P0 + P1 done by 16:45 on build day)
 
@@ -352,6 +355,7 @@ Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body
 | `POST /api/tools/resend-settlement` | `{merchant_id}` | Latest settlement; close `settlement_query` ticket; if fault `none` → `awaiting_verification`; action `statement_sent`; outcome `statement_sent` if none set yet | "₹18,450 was settled on 26 Oct. The statement has been sent on WhatsApp." | "Settlement: ₹18,450 paid on 26 Oct → statement sent on WhatsApp (proof the money arrived)"; adds ", query closed" when a ticket was closed |
 | `POST /api/tools/escalate` | `{merchant_id, reason, summary}` | `handoffs` row (next_step from reason); status `handed_off`; action `escalated`; outcome `handed_off` | per reason (table below) | "Escalated: hardship → Call back within 2 hours; offer rent pause (a rent pause needs a human decision)" |
 | `POST /api/tools/restart-device` (P1) | `{merchant_id}` | Rule §6; action `device_restarted`; outcome `fixed_live` | "Restart done. The device is back online." | "Restart: device back online → awaiting verification (a save counts only when payments resume)" |
+| `POST /api/tools/test-soundbox` (F17) | `{merchant_id}` | Read device; action `soundbox_tested` (payload `amount`, `delivered`, `spoke`); no state change | "I've sent a test alert. Your Soundbox should say 1 rupee received right now." | "Test alert: sent over 4G → Soundbox announced ₹1 (the merchant hears the fix work)" / "Test alert: delivered, speaker silent → technician visit stands (the hardware fault is confirmed)" / "Test alert: not delivered → restart first (the device is offline)" |
 | `POST /api/tools/goodwill-credit` (P1) | `{merchant_id, amount}` | ≤ `GOODWILL_CAP` and no credit yet this month → rent `paid`, close `rent_dispute`, `awaiting_verification`, action `credit_applied`, outcome `credit_applied`; else action `credit_refused` | "₹100 credit applied to this month's rent." / "That is above my limit. I'll ask a senior to help." | "Goodwill credit: ₹100 applied → rent marked paid (it was charged while the device was down)" / "Goodwill credit: ₹500 refused → escalating (above the ₹100 cap)" |
 
 `next_step` and the feed's *why* by `reason`:
@@ -385,6 +389,7 @@ Auth: `Authorization: Bearer $TOOL_SECRET`. Context: `merchant_id` from the body
 - `status` ← `status`; `duration_s` ← `conversation_duration`; `cost_cents` ← `total_cost`; `transcript`, `summary`, `raw` ← payload.
 - On a terminal status (the list under Tool endpoints): set `ended_at`; a later non-terminal webhook never reopens the call; if `conversation_duration` is 0 or missing → outcome `no_answer`; insert one `call_ended` action (only once per call).
 - `transcript` is filled only at `completed`; `summary` is null unless call summary is enabled on the agent.
+- Follow-ups (`wapsi/followups.py`, never fail the webhook): the first terminal delivery of a missed call (`no-answer`, `busy`, `failed`, or 0 s) → actions `whatsapp_sent` and `retry_scheduled` (F18). Any delivery with `extracted_data` → one `mood_detected` action per call and, when upset, a handoff (F19).
 
 ## 8. Bolna agent
 
@@ -415,7 +420,7 @@ Flow:
    time exactly as written. Most replies also have "next": do what it says. Never read "next" aloud.
 4. Fix based on the diagnosis:
    - Speaker fault: offer only these slots: {slot_options}. Call book_technician with the one they pick.
-   - No signal or frozen: call restart_device, then run_diagnostics again.
+   - No signal or frozen: call restart_device, then test_soundbox so they hear it work.
    - They doubt their settlement: call resend_settlement.
    - Upset about rent paid while the device was down: call apply_goodwill_credit, {goodwill_cap} or less, once.
 5. Call escalate_to_human when: they ask for a person; still angry after one attempt to calm them;
@@ -467,7 +472,8 @@ The others follow the same shape (pre-call messages are spoken by Sarvam, so the
 | `resend_settlement` | `/api/tools/resend-settlement` | — | "मैं आपका statement निकाल रहा हूँ।" |
 | `escalate_to_human` | `/api/tools/escalate` | `reason` enum [`asked_for_person`,`angry`,`hardship`,`above_cap`,`fraud_kyc`,`fixes_failed`] (`%(reason)s`), `summary` string: one English sentence, no phone, account or card numbers (`%(summary)s`) | "मैं आपको अपने senior से जोड़ रहा हूँ।" |
 | `restart_device` (P1) | `/api/tools/restart-device` | — | "मैं remote से आपका device restart कर रहा हूँ।" |
-| `apply_goodwill_credit` (P1) | `/api/tools/goodwill-credit` | `amount` integer, ≤ the cap, once a month (`%(amount)i`) | "मैं देखता हूँ क्या कर सकते हैं।" |
+| `apply_goodwill_credit` (P1) | `/api/tools/goodwill-credit` | `amount` integer, ≤ the cap, once a month (`"%(amount)s"`: quoted, the template must be valid JSON) | "मैं देखता हूँ क्या कर सकते हैं।" |
+| `test_soundbox` (F17) | `/api/tools/test-soundbox` | — | "मैं आपके Soundbox पर एक टेस्ट अलर्ट भेज रहा हूँ।" |
 
 **Agent settings**: transcriber Sarvam (Saaras), voice Sarvam Bulbul Hindi (e.g., `shubh`), fast LLM with tool calling, call summary **on**, webhook URL `https://<backend>.vercel.app/api/bolna/webhook?token=<WEBHOOK_SECRET>` (Extractions tab).
 

@@ -16,6 +16,7 @@ const REASONS: Record<string, string> = {
   above_cap: 'Credit above cap',
   fraud_kyc: 'Fraud / KYC',
   fixes_failed: 'Fixes failed',
+  upset_on_call: 'Upset on the call', // raised by Wapsi after the call, from Bolna's mood extraction
 }
 
 type HandoffQueueProps = {

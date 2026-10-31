@@ -1,4 +1,4 @@
-import { ContactShadows, Environment, Float, Html, Lightformer, OrbitControls, PresentationControls } from '@react-three/drei'
+import { ContactShadows, Environment, Float, Lightformer, OrbitControls, PresentationControls } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Volume2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -115,7 +115,7 @@ function TopButton({ icon, x, pill = false }: { icon: ButtonIcon; x: number; pil
   )
 }
 
-function Device({ status, ding, upiId, language }: Omit<Props, 'label' | 'variant'>) {
+function Device({ status, ding, upiId }: Omit<Props, 'label' | 'variant'>) {
   const root = useRef<Group>(null)
   const light = useRef<MeshStandardMaterial>(null)
   const rings = useRef<(Mesh | null)[]>([])
@@ -200,18 +200,6 @@ function Device({ status, ding, upiId, language }: Omit<Props, 'label' | 'varian
         )),
       )}
 
-      {/* What it says, as a speech bubble */}
-      {ding && (
-        <Html position={[0, 1.5, 0.3]} center zIndexRange={[20, 0]}>
-          <div
-            key={ding.at}
-            className="flex animate-rise items-center gap-2 rounded-full border border-line bg-paper px-3.5 py-1.5 text-[14px] font-semibold whitespace-nowrap text-sage shadow-lift"
-          >
-            <Volume2 className="size-4" />
-            {announcement(ding.amount, language)}
-          </div>
-        </Html>
-      )}
     </group>
   )
 }
@@ -227,49 +215,64 @@ export default function SoundboxModel({ status, ding, label, upiId, language, va
     </group>
   )
   return (
-    <Canvas
-      dpr={[1, 2]}
-      camera={stage ? { position: [0, 2.2, 7.2], fov: 28 } : { position: [0, 1.5, 7.2], fov: 25 }}
-      onCreated={({ camera }) => camera.lookAt(0, 0.05, 0)}
-      gl={{ antialias: true, alpha: true }}
-      role="img"
-      aria-label={label}
-      className="cursor-grab active:cursor-grabbing"
-    >
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[4, 6, 5]} intensity={1.4} />
-      <directionalLight position={[-5, 2, -3]} intensity={0.5} color="#fff1dc" />
-      <Environment resolution={128}>
-        <Lightformer form="rect" intensity={2} position={[0, 4, 3]} scale={[6, 2, 1]} />
-        <Lightformer form="rect" intensity={1} position={[-4, 1, 2]} scale={[3, 3, 1]} />
-      </Environment>
-      {stage ? (
-        <>
-          <OrbitControls
-            makeDefault
-            target={[0, 0.05, 0]}
-            enablePan={false}
-            minDistance={4}
-            maxDistance={9}
-            minPolarAngle={0.55}
-            maxPolarAngle={1.7}
-            autoRotate={!reduced}
-            autoRotateSpeed={0.9}
-            enableDamping
-          />
-          <Float enabled={!reduced} speed={1.4} rotationIntensity={0.1} floatIntensity={0.25} floatingRange={[-0.03, 0.05]}>
-            {device}
-          </Float>
-        </>
-      ) : (
-        // Drag to turn it; it springs back.
-        <PresentationControls global snap cursor={false} polar={[-0.2, 0.3]} azimuth={[-1, 1]} speed={1.3}>
-          <Float enabled={!reduced} speed={1.6} rotationIntensity={0.12} floatIntensity={0.3} floatingRange={[-0.03, 0.05]}>
-            {device}
-          </Float>
-        </PresentationControls>
+    <div className="relative h-full w-full">
+      <Canvas
+        dpr={[1, 2]}
+        camera={stage ? { position: [0, 2.2, 7.2], fov: 28 } : { position: [0, 1.5, 7.2], fov: 25 }}
+        onCreated={({ camera }) => camera.lookAt(0, 0.05, 0)}
+        gl={{ antialias: true, alpha: true }}
+        role="img"
+        aria-label={label}
+        className="cursor-grab active:cursor-grabbing"
+      >
+        <ambientLight intensity={0.65} />
+        <directionalLight position={[4, 6, 5]} intensity={1.4} />
+        <directionalLight position={[-5, 2, -3]} intensity={0.5} color="#fff1dc" />
+        <Environment resolution={128}>
+          <Lightformer form="rect" intensity={2} position={[0, 4, 3]} scale={[6, 2, 1]} />
+          <Lightformer form="rect" intensity={1} position={[-4, 1, 2]} scale={[3, 3, 1]} />
+        </Environment>
+        {stage ? (
+          <>
+            <OrbitControls
+              makeDefault
+              target={[0, 0.05, 0]}
+              enablePan={false}
+              minDistance={4}
+              maxDistance={9}
+              minPolarAngle={0.55}
+              maxPolarAngle={1.7}
+              autoRotate={!reduced}
+              autoRotateSpeed={0.9}
+              enableDamping
+            />
+            <Float enabled={!reduced} speed={1.4} rotationIntensity={0.1} floatIntensity={0.25} floatingRange={[-0.03, 0.05]}>
+              {device}
+            </Float>
+          </>
+        ) : (
+          // Drag to turn it; it springs back.
+          <PresentationControls global snap cursor={false} polar={[-0.2, 0.3]} azimuth={[-1, 1]} speed={1.3}>
+            <Float enabled={!reduced} speed={1.6} rotationIntensity={0.12} floatIntensity={0.3} floatingRange={[-0.03, 0.05]}>
+              {device}
+            </Float>
+          </PresentationControls>
+        )}
+        <ContactShadows position={[0, -1.04, 0]} opacity={0.38} scale={7} blur={2.4} far={3} color="#3a2e1f" />
+      </Canvas>
+      {/* What it says, as a speech bubble. A plain overlay, not drei's <Html>: that mounts a second React
+          root inside the canvas, which broke when the canvas closed mid-announcement. */}
+      {ding && (
+        <div className="pointer-events-none absolute top-[9%] left-1/2 -translate-x-1/2">
+          <div
+            key={ding.at}
+            className="flex animate-rise items-center gap-2 rounded-full border border-line bg-paper px-3.5 py-1.5 text-[14px] font-semibold whitespace-nowrap text-sage shadow-lift"
+          >
+            <Volume2 className="size-4" />
+            {announcement(ding.amount, language)}
+          </div>
+        </div>
       )}
-      <ContactShadows position={[0, -1.04, 0]} opacity={0.38} scale={7} blur={2.4} far={3} color="#3a2e1f" />
-    </Canvas>
+    </div>
   )
 }

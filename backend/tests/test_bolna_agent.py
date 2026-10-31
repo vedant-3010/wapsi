@@ -1,6 +1,7 @@
 """The Bolna agent definition (scripts/bolna_agent.py): mid-call language switching."""
 
 import importlib.util
+import json
 from pathlib import Path
 from typing import Any
 
@@ -51,5 +52,24 @@ def test_asked_switches_only_on_request() -> None:
 
 def test_off_pins_the_agent_to_one_language() -> None:
     body = bolna_agent.agent_body("https://backend.test", "mr", ENV, "off")
-    assert body["agent_config"]["tasks"][0]["tools_config"]["multilingual_config"] is None
+    # Left out rather than sent as null when switching is off (bolna_agent.agent_body).
+    assert body["agent_config"]["tasks"][0]["tools_config"].get("multilingual_config") is None
     assert body["agent_prompts"]["task_1"]["system_prompt"] == bolna_agent.PROMPT
+
+
+# Bolna drops the agent one second into every real call if a tool is malformed (found 2026-10-31).
+
+
+def test_every_tool_template_is_valid_json_once_filled() -> None:
+    values = {"merchant_id": "M001", "slot": "tomorrow 3 PM to 5 PM", "reason": "angry", "summary": "x", "amount": "100"}
+    for lang in ("hi", "mr"):
+        tools = bolna_agent.api_tools("https://backend.test", lang, "secret")
+        assert set(tools["tools_params"]) == {t["name"] for t in tools["tools"]}
+        for name, params in tools["tools_params"].items():
+            json.loads(params["param"] % values)  # raises on an unquoted placeholder
+
+
+def test_tools_send_only_fields_in_bolnas_tool_schema() -> None:
+    for tool in bolna_agent.api_tools("https://backend.test", "hi", "secret")["tools"]:
+        assert set(tool) == {"name", "key", "description", "parameters"}, tool["name"]
+        assert tool["key"] == "custom_task"

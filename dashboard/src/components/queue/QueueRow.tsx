@@ -1,4 +1,4 @@
-import { Phone } from 'lucide-react'
+import { CalendarClock, Phone } from 'lucide-react'
 import { motion } from 'motion/react'
 import { forwardRef } from 'react'
 
@@ -7,6 +7,7 @@ import { Sparkline } from '@/components/kit/Sparkline'
 import { type Tone } from '@/components/kit/StatusDot'
 import { TAG } from '@/lib/tones'
 import { Waveform } from '@/components/kit/Waveform'
+import { formatTime } from '@/lib/format'
 import { SPRING_PANEL, STAGGER } from '@/lib/motion'
 import { signalsOf } from '@/lib/signals'
 import type { DeviceStatus, RiskRow } from '@/lib/types'
@@ -67,12 +68,14 @@ type QueueRowProps = {
   index: number
   series: number[] | undefined
   onCall: boolean
+  /** When Wapsi will call again after a missed call (F18). */
+  retryAt?: string
   onOpen: () => void
   onCallClick: () => void
 }
 
 export const QueueRow = forwardRef<HTMLLIElement, QueueRowProps>(function QueueRow(
-  { row, index, series, onCall, onOpen, onCallClick },
+  { row, index, series, onCall, retryAt, onOpen, onCallClick },
   ref,
 ) {
   const status = STATUS[row.status]
@@ -108,6 +111,12 @@ export const QueueRow = forwardRef<HTMLLIElement, QueueRowProps>(function QueueR
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[13px] text-ink-3">
           {row.area} · {LANGUAGE_NAMES[row.language]}
           {status && <span className={cn('tag px-2 py-0 text-[12px] leading-5', TAG[status.tone])}>{status.label}</span>}
+          {retryAt && (
+            <span className={cn('tag gap-1 px-2 py-0 text-[12px] leading-5', TAG.sky)}>
+              <CalendarClock className="size-3" />
+              Retry {formatTime(retryAt)}
+            </span>
+          )}
         </div>
         <div className="mt-1.5">
           <SignalChips row={row} />
