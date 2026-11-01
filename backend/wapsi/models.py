@@ -52,6 +52,11 @@ class SimulateResponse(BaseModel):
     holdout_recovered: int
 
 
+class SimulatedCallResponse(BaseModel):
+    done: bool  # the simulated call has ended; the dashboard stops asking
+    step: str | None = None  # the latest step played
+
+
 class OkResponse(BaseModel):
     ok: bool = True
 

@@ -1,17 +1,18 @@
-"""POST /api/simulate/next-day (F7): technicians visit, payments resume, saves get verified (SPEC §6)."""
+"""POST /api/simulate/next-day (F7): technicians visit, payments resume, saves get verified (SPEC §6).
+POST /api/simulate/call/{id} (F20): play a dry-run call step by step."""
 
 import random
 from datetime import timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from supabase import Client
 
-from wapsi import messages
+from wapsi import dryrun, messages
 from wapsi.actions import log_action
 from wapsi.config import Settings, get_settings
 from wapsi.db import get_db
-from wapsi.models import SimulateResponse
+from wapsi.models import SimulatedCallResponse, SimulateResponse
 from wapsi.util import today, utc_now
 
 router = APIRouter()
@@ -87,3 +88,17 @@ def simulate_next_day(db: Client = Depends(get_db), settings: Settings = Depends
         ).in_("id", picked).execute()
 
     return SimulateResponse(recovered=recovered, holdout_recovered=len(picked))
+
+
+@router.post("/api/simulate/call/{call_id}")
+def simulate_call(
+    call_id: str,
+    db: Client = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> SimulatedCallResponse:
+    try:
+        return dryrun.advance(db, settings, call_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except dryrun.NotDryRun as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

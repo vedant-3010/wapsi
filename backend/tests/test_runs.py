@@ -52,5 +52,7 @@ def test_a_call_that_never_left_queued_stops_blocking_after_two_minutes(client: 
 
 def test_a_ringing_call_still_blocks_after_two_minutes(client: TestClient, fake_db: FakeDb) -> None:
     assert client.post("/api/runs/start", json={}).status_code == 200
-    fake_db.tables["calls"][0].update(status="ringing", started_at=now_iso(-timedelta(minutes=3)))
+    # A real call (Bolna execution id, not a dry run) that has been ringing for 3 minutes.
+    fake_db.tables["calls"][0].update(status="ringing", bolna_execution_id="exec-1",
+                                      started_at=now_iso(-timedelta(minutes=3)))
     assert client.post("/api/runs/start", json={}).status_code == 409

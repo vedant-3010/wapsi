@@ -10,8 +10,25 @@ import { QueuePanel } from '@/components/queue/QueuePanel'
 import { SoundboxCard } from '@/components/SoundboxCard'
 import { TopBar } from '@/components/TopBar'
 import { useCallActive, useDashboard } from '@/hooks/useDashboard'
-import { api } from '@/lib/api'
+import { api, type StartCallResponse } from '@/lib/api'
 import type { Handoff, RiskRow } from '@/lib/types'
+
+/**
+ * F20: in a dry run no phone rings, so the browser that started the call asks the backend to play it, step by step,
+ * until it ends. The steps arrive like a real call's, through Realtime. Closing the tab simply stops it.
+ */
+function playIfDryRun<T extends StartCallResponse>(started: T): T {
+  if (started.execution_id.startsWith('dry-')) {
+    void (async () => {
+      for (let tick = 0; tick < 60; tick += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 2500))
+        const step = await api.simulateCall(started.call_id).catch(() => null)
+        if (!step || step.done) return
+      }
+    })()
+  }
+  return started
+}
 
 // One screen (SPEC §9). Reads come from Supabase; every button writes through the backend.
 export default function App() {
@@ -40,7 +57,8 @@ export default function App() {
   const callActive = useCallActive(dash.call)
   // The merchant /api/runs/start will pick: the queue is already in its order.
   const nextUp = dash.queue.find((r) => r.cohort === 'wapsi' && r.status === 'at_risk') ?? null
-  const run = () => void act('run', api.startRun, (r) => `Wapsi picked ${nameOf(r.merchant_id)} · ${r.reason}`)
+  const run = () =>
+    void act('run', () => api.startRun().then(playIfDryRun), (r) => `Wapsi picked ${nameOf(r.merchant_id)} · ${r.reason}`)
   const simulate = () =>
     void act('simulate', api.simulateNextDay, (r) =>
       `Next day · ${r.recovered} verified save${r.recovered === 1 ? '' : 's'} · ` +
@@ -73,7 +91,7 @@ export default function App() {
             retries={dash.retries}
             className="max-h-[75svh] lg:max-h-none"
             onCall={(row: RiskRow, phone: string) =>
-              act('call', () => api.startCall(row.merchant_id, phone || undefined), () => `Calling ${row.name}`)
+              act('call', () => api.startCall(row.merchant_id, phone || undefined).then(playIfDryRun), () => `Calling ${row.name}`)
             }
           />
           <LiveCall call={dash.call} feed={dash.feed} active={callActive} className="min-h-[60svh] lg:min-h-0" />

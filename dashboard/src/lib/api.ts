@@ -7,6 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 export type StartCallResponse = { call_id: string; execution_id: string; status: string }
 export type StartRunResponse = StartCallResponse & { merchant_id: string; reason: string }
 export type SimulateResponse = { recovered: number; holdout_recovered: number }
+export type SimulatedCallResponse = { done: boolean; step: string | null }
 export type TakeHandoffResponse = { id: string; status: 'taken' }
 
 async function post<T>(path: string, body: unknown = {}): Promise<T> {
@@ -45,6 +46,7 @@ export const api = {
   startCall: (merchantId: string, phone?: string, bypassHours = false) =>
     post<StartCallResponse>('/api/calls/start', { merchant_id: merchantId, phone, bypass_hours: bypassHours }),
   simulateNextDay: () => post<SimulateResponse>('/api/simulate/next-day'),
+  simulateCall: (callId: string) => post<SimulatedCallResponse>(`/api/simulate/call/${callId}`),
   resetDemo: () => post<{ ok: boolean }>('/api/demo/reset'),
   takeHandoff: (id: string) => post<TakeHandoffResponse>(`/api/handoffs/${id}/take`),
   // The Soundbox's voice (Sarvam Bulbul WAV); fetched by useAnnouncer, cached by the browser.

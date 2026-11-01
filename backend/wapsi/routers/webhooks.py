@@ -30,7 +30,11 @@ def bolna_webhook(
 ) -> WebhookResponse:
     if not settings.webhook_secret or not hmac.compare_digest(token.encode(), settings.webhook_secret.encode()):
         raise HTTPException(status_code=403, detail="Bad webhook token")
+    return apply_execution(db, settings, body)
 
+
+def apply_execution(db: Client, settings: Settings, body: BolnaExecution) -> WebhookResponse:
+    """Everything a Bolna execution update does; also how a simulated dry-run call ends (wapsi/dryrun.py)."""
     call = first(db.table("calls").select("*").eq("bolna_execution_id", body.id).limit(1).execute())
     if call is None:
         # Never insert (merchant_id and phone are required); Bolna repeats webhooks, a later one will match.

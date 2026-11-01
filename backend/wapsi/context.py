@@ -59,7 +59,15 @@ def active_calls(db: Client) -> list[dict[str, Any]]:
         .execute()
         .data
     )
-    return [c for c in recent if not (c["status"] == "queued" and parse_ts(c["started_at"]) < now - QUEUED_GRACE)]
+    return [c for c in recent if not (
+        (c["status"] == "queued" or is_dry_run(c)) and parse_ts(c["started_at"]) < now - QUEUED_GRACE
+    )]
+
+
+def is_dry_run(call: dict[str, Any]) -> bool:
+    """A CALL_DRY_RUN call: no phone rang. If its simulation is abandoned (tab closed), it stops blocking after
+    QUEUED_GRACE, like a call Bolna never dialled."""
+    return str(call.get("bolna_execution_id") or "").startswith("dry-")
 
 
 def active_call(db: Client) -> dict[str, Any] | None:

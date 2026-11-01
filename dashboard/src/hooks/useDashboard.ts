@@ -54,11 +54,13 @@ const FALLBACK_POLL_MS = 3000
 const ACTIVE_WINDOW_MS = 15 * 60 * 1000
 const QUEUED_GRACE_MS = 2 * 60 * 1000
 
-/** Same rule as the backend (wapsi/context.py): not final, recent, and not stuck in "queued". */
+/** Same rule as the backend (wapsi/context.py): not final, recent, and neither stuck in "queued" nor an
+ *  abandoned dry run. */
 export function isCallActive(call: Call | null): boolean {
   if (!call || TERMINAL_STATUSES.includes(call.status)) return false
   const age = Date.now() - new Date(call.started_at).getTime()
-  if (call.status === 'queued' && age > QUEUED_GRACE_MS) return false
+  const dryRun = call.bolna_execution_id?.startsWith('dry-') ?? false
+  if ((call.status === 'queued' || dryRun) && age > QUEUED_GRACE_MS) return false
   return age < ACTIVE_WINDOW_MS
 }
 
@@ -71,7 +73,8 @@ export function useCallActive(call: Call | null): boolean {
   const active = isCallActive(call)
   useEffect(() => {
     if (!active || !call) return
-    const limit = call.status === 'queued' ? QUEUED_GRACE_MS : ACTIVE_WINDOW_MS
+    const dryRun = call.bolna_execution_id?.startsWith('dry-') ?? false
+    const limit = call.status === 'queued' || dryRun ? QUEUED_GRACE_MS : ACTIVE_WINDOW_MS
     const left = new Date(call.started_at).getTime() + limit - Date.now()
     const id = window.setTimeout(recheck, left + 250)
     return () => window.clearTimeout(id)

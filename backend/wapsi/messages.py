@@ -287,6 +287,12 @@ _OUTCOME_LABELS = {
 }
 
 
+def simulated_summary(name: str, outcome: str | None) -> str:
+    """The call summary of a dry run (F20): what Wapsi did, said plainly as a simulation."""
+    did = _OUTCOME_LABELS.get(outcome or "", "checked the device")
+    return f"Dry run, no phone rang. Wapsi played the call it would have had with {name}: {did}."
+
+
 def call_ended(status: str, duration_s: float | None, outcome: str | None) -> str:
     if not duration_s:
         return f"Call ended: {status or 'no answer'} → no conversation (the merchant didn't pick up)"

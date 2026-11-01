@@ -156,10 +156,12 @@ export function LiveCall({ call, feed, active, className }: LiveCallProps) {
               <span key={i} className="size-1.5 rounded-full bg-ink-3 animate-dot" style={{ animationDelay: `${i * 160}ms` }} />
             ))}
           </span>
-          {call.status === 'in-progress'
-            ? `Wapsi is talking with ${ownerFirstName}`
-            : dryRun
-              ? 'Dry run: no phone rings'
+          {dryRun
+            ? call.status === 'in-progress'
+              ? `Simulated call with ${ownerFirstName} · no phone rings`
+              : 'Dry run: no phone rings'
+            : call.status === 'in-progress'
+              ? `Wapsi is talking with ${ownerFirstName}`
               : 'Connecting the call'}
         </motion.div>
       )}
